@@ -25,24 +25,21 @@ def backup_dir() -> str:
 
 
 def snapshot(target: str) -> None:
-    src = db.connect()
-    dst = sqlite3.connect(target)
+    """Eigenständige Einzeldatei ohne -wal/-shm, leicht zu kopieren und wiederherzustellen."""
+    db.safety_copy(target)
+
+
+def verify(path: str) -> None:
+    """Prüft, dass eine Sicherung vollständig lesbar ist – sonst Ausnahme."""
+    conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
     try:
-        src.backup(dst)
-        # eigenständige Einzeldatei ohne -wal/-shm, leicht zu kopieren und wiederherzustellen
-        dst.execute("PRAGMA journal_mode = DELETE")
+        ok = conn.execute("PRAGMA integrity_check").fetchone()[0]
+        if ok != "ok":
+            raise RuntimeError(f"Sicherung beschädigt: {ok}")
+        conn.execute("SELECT COUNT(*) FROM products").fetchone()
+        conn.execute("SELECT COUNT(*) FROM stock").fetchone()
     finally:
-        dst.close()
-        src.close()
-        cleanup_sidecars(target)
-
-
-def cleanup_sidecars(path: str) -> None:
-    for suffix in ("-wal", "-shm"):
-        try:
-            os.remove(path + suffix)
-        except OSError:
-            pass
+        conn.close()
 
 
 def run_daily() -> str:
@@ -51,13 +48,40 @@ def run_daily() -> str:
     target = os.path.join(d, f"ballager-{today.isoformat()}.db")
     tmp = target + ".tmp"
     snapshot(tmp)
+    try:
+        verify(tmp)
+    except Exception:
+        os.remove(tmp)
+        raise  # alte Sicherung bleibt unangetastet
     os.replace(tmp, target)
     if today.day == 1:
         monthly = os.path.join(d, f"ballager-monat-{today.strftime('%Y-%m')}.db")
-        snapshot(monthly)
+        if not os.path.exists(monthly):
+            snapshot(monthly)
     _prune(d)
-    log.info("Sicherung erstellt: %s", target)
+    _prune_safety_copies()
+    try:
+        with db.session() as conn:
+            conn.execute("PRAGMA optimize")
+    except Exception:  # nur Optimierung, nie kritisch
+        pass
+    log.info("Sicherung erstellt und geprüft: %s", target)
     return target
+
+
+def _prune_safety_copies(keep: int = 10) -> None:
+    """Sicherheitskopien vor Updates/Wiederherstellungen: die letzten 10 je Art behalten."""
+    try:
+        files = sorted(os.listdir(db.DATA_DIR))
+    except OSError:
+        return
+    for prefix in ("vor-update-", "vor-wiederherstellung-"):
+        old = [f for f in files if f.startswith(prefix) and f.endswith(".db")]
+        for f in old[:-keep]:
+            try:
+                os.remove(os.path.join(db.DATA_DIR, f))
+            except OSError:
+                pass
 
 
 def _prune(d: str) -> None:

@@ -70,9 +70,25 @@ entities:
 
 ## Daten & Sicherheit
 
+> ⚠️ **Updates sind sicher – Deinstallieren nicht!** Bei einem Update bleibt die Datenbank vollständig erhalten.
+> Wer das Add-on aber **deinstalliert**, dem löscht Home Assistant auch dessen Daten (`/data`).
+> Die täglichen Sicherungen in `/share/ballager/backups/` bleiben dabei erhalten und lassen sich über
+> `restore.db` (siehe unten) wieder einspielen.
+
+So ist die Datenbank geschützt:
+
+- **Jede bestätigte Eingabe ist sofort dauerhaft gespeichert** (SQLite im WAL-Modus mit `synchronous=FULL`),
+  auch bei Absturz oder Stromausfall. Getestet mit 10 harten Abstürzen mitten in parallelen Schreibzugriffen: kein Verlust, keine halben Buchungen.
+- **Jede Buchung ist eine Transaktion** – entweder ganz oder gar nicht. Bestand und Verlauf passen immer zusammen.
+- **Prüfung bei jedem Start** (Integrität und Verweise); das Ergebnis steht unter *Mehr → Daten & Sicherung*.
+- **Vor jedem Update mit Datenbank-Änderung** legt BALLager automatisch eine Sicherheitskopie in `/data` an.
+  Schlägt eine Änderung fehl, wird sie vollständig zurückgerollt und die Daten bleiben unverändert.
+- **Ältere Version auf neuerer Datenbank** (z.B. nach Zurückspielen eines alten Add-on-Stands): BALLager schaltet auf *nur lesen*, statt etwas zu verändern.
+
 - Die Datenbank (SQLite, WAL-Modus, Fremdschlüssel, versionierte Migrationen) liegt in `/data/ballager.db`
   und ist Teil jeder **Home-Assistant-Sicherung**.
 - Zusätzlich sichert BALLager täglich nach `/share/ballager/backups/` (14 Tagesstände + 24 Monatsstände).
+  Jede Sicherung wird vor dem Ablegen auf Lesbarkeit geprüft; eine fehlerhafte ersetzt nie eine gute.
   Über Samba/„Share“ kommt ihr direkt an die Dateien.
 - **Wiederherstellen:** entweder die Home-Assistant-Sicherung des Add-ons wiederherstellen, oder eine Datei aus
   `/share/ballager/backups/` nach `/share/ballager/restore.db` kopieren und das Add-on neu starten.

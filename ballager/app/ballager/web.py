@@ -45,6 +45,13 @@ def _validation(e):
     return jsonify(error=str(e)), 400
 
 
+@app.errorhandler(ValueError)
+@app.errorhandler(TypeError)
+def _bad_input(e):
+    log.info("Ungültige Eingabe: %s", e)
+    return jsonify(error="Ungültige Eingabe – bitte Werte prüfen."), 400
+
+
 @app.errorhandler(sqlite3.IntegrityError)
 def _integrity(e):
     msg = str(e)
@@ -66,6 +73,9 @@ def _only_ingress():
     """Im Add-on nur Zugriffe über Home Assistant (Ingress, mit HA-Anmeldung) zulassen."""
     if _GUARD and request.path != "/api/health" and request.remote_addr not in (INGRESS_IP, "127.0.0.1"):
         return jsonify(error="Bitte BALLager über Home Assistant öffnen"), 403
+    if db.STATUS.get("readonly") and request.method != "GET" and request.path.startswith("/api/"):
+        return jsonify(error="Die Datenbank stammt von einer neueren BALLager-Version. "
+                             "Bitte das Add-on aktualisieren – bis dahin ist nur Lesen möglich."), 409
     return None
 
 
@@ -500,7 +510,10 @@ def backup_download():
 
 @app.get("/api/backups")
 def backups():
-    return jsonify(items=backup.list_backups(), path=backup.backup_dir())
+    with db.session() as conn:
+        counts = {t: conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+                  for t in ("products", "stock", "movements", "categories", "locations")}
+    return jsonify(items=backup.list_backups(), path=backup.backup_dir(), status=db.STATUS, counts=counts)
 
 
 @app.post("/api/backups")

@@ -1088,7 +1088,11 @@ async function renderSettings() {
 
     <section class="card" style="margin-top:16px">
       <h2>🛟 Daten & Sicherung</h2>
-      <p class="muted small" style="margin:6px 0 12px">Die Datenbank wird jeden Tag automatisch gesichert (14 Tage + 24 Monate) und ist außerdem Teil eurer Home-Assistant-Backups.</p>
+      ${bk.status ? `<div class="hint ${bk.status.integrity === "ok" ? "info" : ""}" style="margin:10px 0;${bk.status.integrity === "ok" ? "" : "background:var(--danger-l)"}">
+        ${bk.status.integrity === "ok" ? "✅ Datenbank geprüft und in Ordnung" : "⚠️ Datenbank-Prüfung: " + esc(bk.status.integrity)}
+        · ${bk.counts.products} Produkte · ${bk.counts.stock} Chargen · ${bk.counts.movements} Bewegungen
+        <div class="tiny muted">Geprüft beim Start: ${esc((bk.status.checked_at || "").replace("T", " "))} · Schema-Version ${bk.status.schema}</div></div>` : ""}
+      <p class="muted small" style="margin:6px 0 12px">Die Datenbank wird jeden Tag automatisch gesichert und geprüft (14 Tage + 24 Monate) und ist außerdem Teil eurer Home-Assistant-Backups. Vor jedem Update mit Datenbank-Änderung legt BALLager zusätzlich eine Sicherheitskopie an.</p>
       <div class="row wrap">
         <a class="btn" href="api/export.csv">📄 Export (CSV / Excel)</a>
         <a class="btn" href="api/backup/download">💾 Datenbank herunterladen</a>

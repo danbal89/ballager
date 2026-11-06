@@ -171,7 +171,8 @@ def _configure(conn: sqlite3.Connection) -> None:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA busy_timeout = 8000")
-    conn.execute("PRAGMA synchronous = NORMAL")
+    # FULL: jede bestätigte Änderung ist auch nach Stromausfall auf der Platte.
+    conn.execute("PRAGMA synchronous = FULL")
 
 
 def connect() -> sqlite3.Connection:
@@ -227,7 +228,8 @@ def _restore_if_requested() -> None:
     from datetime import datetime
     stamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
     if os.path.exists(DB_PATH):
-        shutil.copy2(DB_PATH, os.path.join(DATA_DIR, f"vor-wiederherstellung-{stamp}.db"))
+        # konsistente Kopie inkl. noch nicht eingearbeiteter WAL-Daten
+        safety_copy(os.path.join(DATA_DIR, f"vor-wiederherstellung-{stamp}.db"))
     for suffix in ("-wal", "-shm"):
         if os.path.exists(DB_PATH + suffix):
             os.remove(DB_PATH + suffix)
@@ -236,17 +238,55 @@ def _restore_if_requested() -> None:
     log.warning("Datenbank aus restore.db wiederhergestellt.")
 
 
+def safety_copy(target: str) -> None:
+    """Konsistente Einzeldatei-Kopie der laufenden Datenbank (SQLite-Backup-API)."""
+    src = connect()
+    dst = sqlite3.connect(target)
+    try:
+        src.backup(dst)
+        dst.execute("PRAGMA journal_mode = DELETE")
+    finally:
+        dst.close()
+        src.close()
+    for suffix in ("-wal", "-shm"):
+        try:
+            os.remove(target + suffix)
+        except OSError:
+            pass
+
+
+# Ergebnis der Prüfung beim Start (für Anzeige in den Einstellungen)
+STATUS: dict = {"integrity": "unbekannt", "checked_at": "", "schema": 0, "schema_expected": len(MIGRATIONS)}
+
+
 def init() -> None:
     with _init_lock:
+        from datetime import datetime
         os.makedirs(DATA_DIR, exist_ok=True)
         _restore_if_requested()
         conn = connect()
         try:
             conn.execute("PRAGMA journal_mode = WAL")
-            ok = conn.execute("PRAGMA quick_check").fetchone()[0]
-            if ok != "ok":
-                log.error("Integritätsprüfung meldet Probleme: %s – bitte Sicherung prüfen!", ok)
+            ok = conn.execute("PRAGMA integrity_check").fetchone()[0]
+            fk = conn.execute("PRAGMA foreign_key_check").fetchall()
+            STATUS["integrity"] = ok if not fk else f"{ok}; {len(fk)} verwaiste Verweise"
+            STATUS["checked_at"] = datetime.now().isoformat(timespec="seconds")
+            if ok != "ok" or fk:
+                log.error("Integritätsprüfung meldet Probleme: %s – bitte Sicherung prüfen!", STATUS["integrity"])
             version = conn.execute("PRAGMA user_version").fetchone()[0]
+            STATUS["schema"] = version
+            if version > len(MIGRATIONS):
+                log.error("Die Datenbank (Schema %d) stammt von einer NEUEREN BALLager-Version (kennt nur %d). "
+                          "Bitte BALLager aktualisieren – die Daten werden nicht verändert.", version, len(MIGRATIONS))
+                STATUS["readonly"] = True
+                return
+            if 0 < version < len(MIGRATIONS):
+                # Vor jeder Schemaänderung durch ein Update: Sicherheitskopie
+                target = os.path.join(DATA_DIR, f"vor-update-schema{version}-{datetime.now():%Y-%m-%d_%H%M%S}.db")
+                conn.close()
+                safety_copy(target)
+                conn = connect()
+                log.info("Sicherheitskopie vor Update angelegt: %s", target)
             for idx in range(version, len(MIGRATIONS)):
                 log.info("Migriere Datenbank auf Version %d", idx + 1)
                 conn.execute("BEGIN IMMEDIATE")
@@ -258,6 +298,7 @@ def init() -> None:
                 except BaseException:
                     conn.execute("ROLLBACK")
                     raise
+                STATUS["schema"] = idx + 1
             if version == 0:
                 _seed(conn)
             _ensure_settings(conn)
@@ -266,20 +307,21 @@ def init() -> None:
 
 
 def _split_sql(script: str) -> list[str]:
-    parts, buf = [], []
-    for line in script.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("--"):
-            continue
-        buf.append(line)
-        if stripped.endswith(";"):
-            stmt = "\n".join(buf).strip()
-            if stmt and sqlite3.complete_statement(stmt):
-                parts.append(stmt)
-                buf = []
-    rest = "\n".join(buf).strip()
-    if rest:
-        parts.append(rest)
+    """Zerlegt ein Migrationsskript in Einzelbefehle.
+
+    Trennt an jedem ';', an dem SQLite den Befehl für vollständig hält – also auch mehrere
+    Befehle pro Zeile und ';' innerhalb von Texten ('a;b') werden korrekt behandelt.
+    """
+    lines = [ln for ln in script.splitlines() if not ln.strip().startswith("--")]
+    parts, buf = [], ""
+    for ch in "\n".join(lines):
+        buf += ch
+        if ch == ";" and sqlite3.complete_statement(buf):
+            if buf.strip().strip(";").strip():
+                parts.append(buf.strip())
+            buf = ""
+    if buf.strip():
+        parts.append(buf.strip())  # unvollständig -> SQLite meldet beim Ausführen den Fehler
     return parts
 
 

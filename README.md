@@ -64,6 +64,18 @@ cd ballager/app && pip install -r requirements.txt && BALLAGER_DATA=./devdata py
 
 Dann <http://localhost:8099> öffnen.
 
+## Tests – vor jedem Update ausführen
+
+```bash
+python3 -m unittest discover -s tests -v      # 38 Tests: alle Funktionen, Sicherung, Migrationen, Parallelität
+python3 tests/update_test.py <alte-git-version> # echter Update-Test: alte Version erfasst, neue liest weiter
+python3 tests/crash_test.py 10                  # 10 harte Abstürze mitten im Schreiben
+```
+
+**Regeln für Datenbank-Änderungen:** in `db.py` nur neue Einträge an `MIGRATIONS` anhängen, nie bestehende ändern;
+nur additive Änderungen (neue Spalten mit Standardwert, neue Tabellen/Indizes). Danach `update_test.py` mit der
+zuletzt veröffentlichten Version laufen lassen.
+
 ## Lizenzen von Fremdbestandteilen
 
 - [html5-qrcode](https://github.com/mebjas/html5-qrcode) 2.3.8 – Apache-2.0

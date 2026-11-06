@@ -6,6 +6,14 @@
 - Scanner: Kamera mit Full-HD-Auflösung und Dauer-Autofokus – Barcodes werden aus größerem Abstand erkannt
 - Scanner: Zoom-Regler und Taschenlampe (sofern das Handy es unterstützt, meist Android)
 - Hinweis zum idealen Abstand unter dem Scan-Rahmen
+- Datenbank: `synchronous=FULL` – bestätigte Eingaben überstehen auch einen Stromausfall
+- Datenbank: automatische Sicherheitskopie vor jedem Schema-Update; fehlgeschlagene Updates werden vollständig zurückgerollt
+- Datenbank: vollständige Integritätsprüfung beim Start, Status unter „Daten & Sicherung“
+- Datenbank: Schreibschutz, falls eine ältere BALLager-Version eine neuere Datenbank öffnet
+- Sicherungen werden vor dem Ablegen geprüft; Sicherheitskopie vor Wiederherstellung enthält jetzt auch noch nicht eingearbeitete Änderungen
+- Migrationen: robuste Zerlegung in Einzelbefehle
+- Ungültige Eingaben liefern eine verständliche Meldung statt eines Serverfehlers
+- Neu: automatische Tests (`tests/`) inkl. Update- und Absturztest
 
 ## 1.0.0
 
