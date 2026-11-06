@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#FF6B5B">
+  <title>BALLager</title>
+  <link rel="icon" type="image/svg+xml" href="static/icon.svg">
+  <link rel="apple-touch-icon" href="static/icon-256.png">
+  <link rel="stylesheet" href="static/app.css?v=1.0.0">
+</head>
+<body>
+  <header class="topbar">
+    <a href="#/" class="brand" aria-label="BALLager Startseite">
+      <img src="static/icon.svg" alt="" class="brand-icon">
+      <span class="brand-text"><b class="c-coral">BALLa</b><b>ger</b></span>
+    </a>
+    <nav class="topnav" aria-label="Hauptnavigation">
+      <a href="#/" data-nav="home">Übersicht</a>
+      <a href="#/vorrat" data-nav="vorrat">Vorrat</a>
+      <a href="#/scan" data-nav="scan" class="topnav-scan">Scannen</a>
+      <a href="#/einkauf" data-nav="einkauf">Einkauf</a>
+      <a href="#/einstellungen" data-nav="einstellungen">Einstellungen</a>
+    </nav>
+  </header>
+
+  <main id="view" class="view" tabindex="-1"></main>
+
+  <nav class="tabbar" aria-label="Navigation">
+    <a href="#/" data-nav="home"><span class="ti">🏠</span><span>Übersicht</span></a>
+    <a href="#/vorrat" data-nav="vorrat"><span class="ti">🗄️</span><span>Vorrat</span></a>
+    <a href="#/scan" data-nav="scan" class="tab-scan" aria-label="Scannen"><span class="scan-bubble"><svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M7 9v6M10 9v6M13 9v6M17 9v6"/></svg></span><span>Scannen</span></a>
+    <a href="#/einkauf" data-nav="einkauf"><span class="ti">🛒</span><span>Einkauf</span></a>
+    <a href="#/einstellungen" data-nav="einstellungen"><span class="ti">⚙️</span><span>Mehr</span></a>
+  </nav>
+
+  <div id="sheet" class="sheet-wrap" hidden>
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <button class="sheet-close" data-close aria-label="Schließen">✕</button>
+      <div id="sheet-body"></div>
+    </div>
+  </div>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+  <div id="scan-file-reader" hidden></div>
+
+  <script src="static/vendor/html5-qrcode.min.js"></script>
+  <script src="static/app.js?v=1.0.0"></script>
+</body>
+</html>

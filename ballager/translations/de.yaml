@@ -1,0 +1,12 @@
+configuration:
+  log_level:
+    name: Protokoll-Stufe
+    description: Wie ausführlich BALLager ins Add-on-Protokoll schreibt.
+  direct_access:
+    name: Direktzugriff erlauben
+    description: >-
+      Erlaubt den Zugriff über den Netzwerk-Port 8099 ohne Home-Assistant-Anmeldung
+      (z.B. für ein Küchen-Tablet). Zusätzlich muss unter "Netzwerk" ein Port eingetragen werden.
+      Normalerweise ausgeschaltet lassen.
+network:
+  8099/tcp: Direktzugriff ohne Home Assistant (normalerweise leer lassen)

@@ -1,0 +1,30 @@
+name: BALLager
+version: "1.0.0"
+slug: ballager
+description: "Unser Vorrat. Gut sortiert. – Vorratslager mit Barcode-Scan, MHD-Erinnerungen & Einkaufsliste"
+arch:
+  - amd64
+  - aarch64
+init: false
+startup: application
+boot: auto
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:archive-outline
+panel_title: BALLager
+homeassistant_api: true
+backup: cold
+map:
+  - type: share
+    read_only: false
+ports:
+  8099/tcp: null
+ports_description:
+  8099/tcp: "Direktzugriff ohne Home Assistant (normalerweise leer lassen)"
+options:
+  log_level: info
+  direct_access: false
+schema:
+  log_level: list(debug|info|warning|error)
+  direct_access: bool
+watchdog: "http://[HOST]:[PORT:8099]/api/health"

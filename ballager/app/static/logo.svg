@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 256" role="img" aria-label="BALLager – Unser Vorrat. Gut sortiert.">
+  <g>
+  <defs>
+    <clipPath id="jar">
+      <path d="M92 74h72v8c26 9 34 26 34 48v66c0 22-14 32-32 32H90c-18 0-32-10-32-32v-66c0-22 8-39 34-48z"/>
+    </clipPath>
+  </defs>
+  <rect width="256" height="256" rx="60" fill="#FFF1E0"/>
+  <ellipse cx="128" cy="232" rx="78" ry="9" fill="#2D3A5A" opacity=".10"/>
+  <!-- Glas -->
+  <path d="M92 74h72v8c26 9 34 26 34 48v66c0 22-14 32-32 32H90c-18 0-32-10-32-32v-66c0-22 8-39 34-48z" fill="#FFFFFF"/>
+  <g clip-path="url(#jar)">
+    <circle cx="74"  cy="208" r="20" fill="#FFC145"/>
+    <circle cx="112" cy="210" r="20" fill="#2EC4A5"/>
+    <circle cx="150" cy="210" r="20" fill="#FF6B5B"/>
+    <circle cx="188" cy="208" r="20" fill="#5AA9E6"/>
+    <circle cx="93"  cy="174" r="20" fill="#FF6B5B"/>
+    <circle cx="131" cy="174" r="20" fill="#FFC145"/>
+    <circle cx="169" cy="174" r="20" fill="#2EC4A5"/>
+    <circle cx="74"  cy="140" r="20" fill="#5AA9E6"/>
+    <circle cx="112" cy="139" r="20" fill="#2EC4A5"/>
+    <circle cx="150" cy="140" r="20" fill="#FF6B5B"/>
+    <circle cx="186" cy="141" r="20" fill="#FFC145"/>
+    <circle cx="130" cy="106" r="19" fill="#5AA9E6"/>
+    <g fill="#FFFFFF" opacity=".55">
+      <circle cx="67" cy="201" r="5"/><circle cx="105" cy="203" r="5"/><circle cx="143" cy="203" r="5"/><circle cx="181" cy="201" r="5"/>
+      <circle cx="86" cy="167" r="5"/><circle cx="124" cy="167" r="5"/><circle cx="162" cy="167" r="5"/>
+      <circle cx="67" cy="133" r="5"/><circle cx="105" cy="132" r="5"/><circle cx="143" cy="133" r="5"/><circle cx="179" cy="134" r="5"/>
+      <circle cx="124" cy="99" r="5"/>
+    </g>
+  </g>
+  <path d="M92 74h72v8c26 9 34 26 34 48v66c0 22-14 32-32 32H90c-18 0-32-10-32-32v-66c0-22 8-39 34-48z" fill="none" stroke="#2D3A5A" stroke-width="8" stroke-linejoin="round"/>
+  <!-- Deckel -->
+  <rect x="80" y="40" width="96" height="34" rx="12" fill="#FF6B5B" stroke="#2D3A5A" stroke-width="8"/>
+  <path d="M98 57h60" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round" opacity=".55"/>
+</g>
+  <text x="284" y="150" font-family="Nunito, 'Arial Rounded MT Bold', 'SF Pro Rounded', ui-rounded, 'Segoe UI', sans-serif" font-weight="900" font-size="112" letter-spacing="-2"><tspan fill="#FF6B5B">BALLa</tspan><tspan fill="#2D3A5A">ger</tspan></text>
+  <text x="290" y="204" font-family="Nunito, 'Arial Rounded MT Bold', 'SF Pro Rounded', ui-rounded, 'Segoe UI', sans-serif" font-weight="700" font-size="34" fill="#2EC4A5">Unser Vorrat. Gut sortiert.</text>
+</svg>

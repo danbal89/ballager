@@ -1,0 +1,89 @@
+# BALLager – Unser Vorrat. Gut sortiert.
+
+BALLager ist das Vorratslager für die ganze Familie: Produkte per Barcode einlagern,
+beim Verbrauch mit einem Tipp austragen und rechtzeitig erinnert werden, bevor etwas abläuft.
+
+## Erste Schritte
+
+1. Add-on starten und **„In Seitenleiste anzeigen“** aktivieren.
+2. In der Seitenleiste auf **BALLager** tippen.
+3. Unter **Mehr → Einstellungen** Lagerorte und Kategorien anpassen (Speis und Technikraum sind schon angelegt).
+4. **Scannen → Einlagern** und los geht’s.
+
+## Scannen
+
+| Möglichkeit | Wann |
+|---|---|
+| 📷 **Live-Kamera** | Braucht eine sichere Verbindung (HTTPS), z.B. über Home Assistant Cloud (Nabu Casa) oder ein eigenes SSL-Zertifikat. |
+| 📸 **Foto vom Barcode** | Klappt immer, auch über `http://homeassistant.local:8123`. Das Handy öffnet die Kamera, Foto machen, fertig. |
+| ⌨️ **Code eintippen** | Wenn der Barcode beschädigt ist. |
+| ✍️ **Ohne Barcode** | Für lose Ware, Selbstgemachtes usw. |
+
+Unbekannte Barcodes werden automatisch bei *Open Food Facts*, *Open Beauty Facts* und *Open Products Facts*
+nachgeschlagen. Ab dem zweiten Scan erkennt BALLager das Produkt selbst – auch ohne Internet.
+
+**Ablaufdatum schnell eingeben:** `31.12.27`, `311227`, `12/27` oder `1227` (→ Monatsende) – oder die Schnellknöpfe
+*+3 Monate*, *+1 Jahr* usw. Haushaltsartikel bekommen einfach kein Datum.
+
+**Entnehmen:** Im Modus *Entnehmen* scannen, oder in der Vorratsliste auf **−** tippen. BALLager nimmt automatisch
+zuerst das, was am frühesten abläuft. Jede Entnahme lässt sich direkt rückgängig machen.
+
+## Erinnerungen
+
+Unter **Mehr → Erinnerungen** einstellen, wie viele Tage vorher erinnert wird (Standard: 30, 7 und 1 Tag) und um welche
+Uhrzeit geprüft wird. Pro Posten und Stufe kommt genau **eine** Nachricht – keine Dauerbeschallung.
+Alle fälligen Produkte werden in einer Nachricht zusammengefasst.
+
+### Kanäle
+
+- **Home Assistant** – alle `notify.*` Dienste werden angeboten, z.B. `notify.mobile_app_<handy>` für Push-Nachrichten
+  über die Companion-App, oder `persistent_notification.create` für eine Meldung in HA.
+  Auch WhatsApp/Telegram/Signal-Integrationen, die einen `notify`-Dienst bereitstellen, funktionieren hier.
+- **E-Mail** – direkt über SMTP. Bei Gmail/Outlook ein *App-Passwort* verwenden.
+  Beispiele: Gmail `smtp.gmail.com` / 587 / STARTTLS · GMX `mail.gmx.net` / 587 / STARTTLS · A1 `smtp.a1.net` / 587 / STARTTLS.
+- **WhatsApp** – kostenlos über [CallMeBot](https://www.callmebot.com/blog/free-api-whatsapp-messages/).
+  Jede Person holt sich einmalig einen eigenen API-Key (Anleitung in den Einstellungen).
+
+Mit **Testnachricht** prüft ihr die Kanäle, mit **Vorschau** seht ihr, was heute verschickt würde.
+
+## Home-Assistant-Sensoren
+
+BALLager stellt automatisch diese Sensoren bereit (aktualisiert alle 10 Minuten und nach jeder Änderung):
+
+| Sensor | Inhalt |
+|---|---|
+| `sensor.ballager_bald_ablaufend` | Anzahl Posten, die bald ablaufen (Attribut `artikel` mit Liste) |
+| `sensor.ballager_abgelaufen` | Anzahl abgelaufener Posten |
+| `sensor.ballager_vorrat` | Stück im Vorrat gesamt |
+| `sensor.ballager_einkaufsliste` | Produkte unter Mindestbestand (Attribut `artikel`) |
+
+Beispiel für eine Dashboard-Karte:
+
+```yaml
+type: entities
+title: BALLager
+entities:
+  - sensor.ballager_bald_ablaufend
+  - sensor.ballager_abgelaufen
+  - sensor.ballager_einkaufsliste
+```
+
+## Daten & Sicherheit
+
+- Die Datenbank (SQLite, WAL-Modus, Fremdschlüssel, versionierte Migrationen) liegt in `/data/ballager.db`
+  und ist Teil jeder **Home-Assistant-Sicherung**.
+- Zusätzlich sichert BALLager täglich nach `/share/ballager/backups/` (14 Tagesstände + 24 Monatsstände).
+  Über Samba/„Share“ kommt ihr direkt an die Dateien.
+- **Wiederherstellen:** entweder die Home-Assistant-Sicherung des Add-ons wiederherstellen, oder eine Datei aus
+  `/share/ballager/backups/` nach `/share/ballager/restore.db` kopieren und das Add-on neu starten.
+  BALLager prüft die Datei, legt vom aktuellen Stand eine Kopie an und übernimmt sie.
+- Zugriff ist nur über Home Assistant (mit eurer HA-Anmeldung) möglich. Den Direktzugriff über Port 8099 nur im
+  vertrauenswürdigen Heimnetz aktivieren – dort gibt es keine Anmeldung.
+- Gespeicherte Passwörter/API-Keys werden in der Oberfläche nie wieder angezeigt.
+
+## Optionen
+
+| Option | Bedeutung |
+|---|---|
+| `log_level` | Protokoll-Stufe |
+| `direct_access` | Zugriff über Port 8099 ohne HA-Anmeldung erlauben (zusätzlich Port unter „Netzwerk“ eintragen) |

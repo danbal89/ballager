@@ -1,0 +1,11 @@
+configuration:
+  log_level:
+    name: Log level
+    description: How verbose BALLager writes to the add-on log.
+  direct_access:
+    name: Allow direct access
+    description: >-
+      Allows access via network port 8099 without Home Assistant login (e.g. for a kitchen tablet).
+      You also have to set a port under "Network". Leave off normally.
+network:
+  8099/tcp: Direct access without Home Assistant (normally leave empty)
