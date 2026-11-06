@@ -311,6 +311,20 @@ textarea { min-height: 80px; resize: vertical; }
 }
 .scan-frame::after { content: ""; position: absolute; left: 8px; right: 8px; top: 50%; height: 3px; background: var(--coral); border-radius: 3px; box-shadow: 0 0 12px var(--coral); animation: scanline 1.8s ease-in-out infinite; }
 @keyframes scanline { 0%,100% { transform: translateY(-28px); } 50% { transform: translateY(28px); } }
+.scan-frame > span {
+  position: absolute; left: 50%; top: calc(100% + 10px); transform: translateX(-50%); white-space: nowrap;
+  font-size: 12px; font-weight: 800; color: #fff; background: rgba(0,0,0,.45); padding: 3px 10px; border-radius: 999px;
+}
+.scan-tools {
+  position: absolute; z-index: 3; left: 10px; right: 10px; bottom: 10px; display: flex; gap: 10px; align-items: center;
+}
+.scan-tools .icon-btn { background: rgba(0,0,0,.5); color: #fff; }
+.scan-tools .icon-btn.on { background: var(--sun); color: var(--navy); }
+.scan-tools .zoom {
+  flex: 1; display: flex; align-items: center; gap: 8px; padding: 0 12px; height: 40px; border-radius: 12px;
+  background: rgba(0,0,0,.5); color: #fff;
+}
+.scan-tools .zoom input { min-height: 0; padding: 0; border: 0; background: transparent; accent-color: var(--coral); box-shadow: none; }
 .scan-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
 .hint { background: var(--sun-l); border-radius: 16px; padding: 12px 14px; font-size: 14px; font-weight: 700; }
 .hint.info { background: var(--sky-l); }

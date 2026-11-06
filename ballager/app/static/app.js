@@ -296,18 +296,18 @@ function readForm(form) {
   return d;
 }
 
-function bindCatGrid(root) {
-  root.addEventListener("click", (e) => {
-    const b = e.target.closest("[data-cat]");
-    if (!b) return;
-    const grid = b.closest(".cat-grid");
-    const hidden = grid.previousElementSibling;
-    const on = b.classList.contains("on");
-    $$(".cat-opt", grid).forEach((x) => x.classList.remove("on"));
-    if (!on) b.classList.add("on");
-    hidden.value = on ? "" : b.dataset.cat;
-  });
-}
+// Kategorie-Auswahl: genau EIN globaler Handler (nicht pro Dialog anhängen,
+// sonst heben sich mehrere Handler gegenseitig auf).
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-cat]");
+  if (!b) return;
+  const grid = b.closest(".cat-grid");
+  const hidden = grid.previousElementSibling;
+  const on = b.classList.contains("on");
+  $$(".cat-opt", grid).forEach((x) => x.classList.remove("on"));
+  if (!on) b.classList.add("on");
+  hidden.value = on ? "" : b.dataset.cat;
+});
 
 function newProductSheet(prefill = {}, onDone) {
   const sug = prefill.source ? `<div class="hint info" style="margin-bottom:12px">✨ Gefunden bei ${esc(prefill.source)} – bitte kurz prüfen.</div>` : (prefill.barcode ? `<div class="hint" style="margin-bottom:12px">🤔 Barcode ${esc(prefill.barcode)} ist noch unbekannt. Einmal anlegen – beim nächsten Scan wird es automatisch erkannt.</div>` : "");
@@ -321,7 +321,6 @@ function newProductSheet(prefill = {}, onDone) {
       ${stockFields(prefill)}
       <button class="btn primary big full" type="submit">Speichern & einlagern</button>
     </form>`, () => onDone && onDone(false));
-  bindCatGrid(body);
   initExpiry(body);
   $("#pform").onsubmit = (e) => {
     e.preventDefault();
@@ -339,7 +338,7 @@ function newProductSheet(prefill = {}, onDone) {
       onDone && onDone(true);
     });
   };
-  setTimeout(() => { const n = $("[name=name]", body); if (!n.value) n.focus(); }, 250);
+  setTimeout(() => { const n = $("[name=name]", body); if (n && !n.value) n.focus(); }, 250);
 }
 
 function rememberLocation(id) { if (id) { S.lastLocation = Number(id); store.set("lastLocation", S.lastLocation); } }
@@ -380,7 +379,6 @@ function editProductSheet(p, onDone) {
       <button class="btn primary big full" type="submit">💾 Speichern</button>
       <button class="btn danger full" type="button" data-del>🗑️ Produkt ganz löschen</button>
     </form>`, () => onDone && onDone(false));
-  bindCatGrid(body);
   $("#eform").onsubmit = (e) => {
     e.preventDefault();
     run(async () => {
@@ -763,10 +761,28 @@ async function startScanner() {
   $("#scan-idle").classList.add("hidden");
   $("#scan-frame").classList.remove("hidden");
   scanner = newReader("reader");
+  // Hohe Auflösung + Dauer-Autofokus: Barcodes werden auch aus 15–25 cm lesbar.
+  const hd = {
+    fps: 12,
+    videoConstraints: {
+      facingMode: "environment",
+      width: { ideal: 1920 },
+      height: { ideal: 1080 },
+      advanced: [{ focusMode: "continuous" }],
+    },
+  };
   try {
-    await scanner.start({ facingMode: "environment" }, { fps: 12, aspectRatio: 1.3333 }, onDecoded, () => {});
+    try {
+      await scanner.start({ facingMode: "environment" }, hd, onDecoded, () => {});
+    } catch (e) {
+      console.warn("HD-Kamera nicht möglich, nutze Standard", e);
+      try { scanner.clear(); } catch { /* egal */ }
+      scanner = newReader("reader");
+      await scanner.start({ facingMode: "environment" }, { fps: 12 }, onDecoded, () => {});
+    }
     $("#cam-btn").textContent = "⏹ Kamera stoppen";
     store.set("camOn", true);
+    setupCameraTools();
   } catch (e) {
     console.warn(e);
     scanner = null;
@@ -775,10 +791,45 @@ async function startScanner() {
     toast("Kamera nicht verfügbar – nutzt „Foto vom Barcode“ 📸", { error: true });
   }
 }
+/** Zoom-Regler und Taschenlampe einblenden, wenn das Gerät es unterstützt (v.a. Android). */
+function setupCameraTools() {
+  const tools = $("#scan-tools");
+  if (!tools || !scanner) return;
+  let caps;
+  try { caps = scanner.getRunningTrackCameraCapabilities(); } catch { return; }
+  try { scanner.applyVideoConstraints({ advanced: [{ focusMode: "continuous" }] }).catch(() => {}); } catch { /* egal */ }
+  let any = false;
+  try {
+    const zoom = caps.zoomFeature();
+    if (zoom.isSupported()) {
+      const z = $("#zoom-in");
+      const max = Math.min(zoom.max(), 5);
+      z.min = zoom.min(); z.max = max; z.step = zoom.step() || 0.1;
+      z.value = zoom.value() || zoom.min();
+      z.oninput = () => { zoom.apply(Number(z.value)).catch(() => {}); };
+      $("#zoom-wrap").classList.remove("hidden");
+      any = true;
+    }
+  } catch { /* kein Zoom */ }
+  try {
+    const torch = caps.torchFeature();
+    if (torch.isSupported()) {
+      const b = $("#torch-btn");
+      let on = false;
+      b.onclick = () => { on = !on; torch.apply(on).then(() => b.classList.toggle("on", on)).catch(() => { on = !on; }); };
+      b.classList.remove("hidden");
+      any = true;
+    }
+  } catch { /* keine Lampe */ }
+  tools.classList.toggle("hidden", !any);
+}
+
 async function stopScanner() {
   const s = scanner;
   scanner = null;
   scanBusy = false;
+  const tools = $("#scan-tools");
+  if (tools) tools.classList.add("hidden");
   if (!s) return;
   try { await s.stop(); } catch { /* schon gestoppt */ }
   try { s.clear(); } catch { /* egal */ }
@@ -852,7 +903,11 @@ function renderScan(params) {
     </div>
     <div class="scanner">
       <div id="reader"></div>
-      <div id="scan-frame" class="scan-frame hidden"></div>
+      <div id="scan-frame" class="scan-frame hidden"><span>Barcode in den Rahmen · ca. 15–25 cm Abstand</span></div>
+      <div id="scan-tools" class="scan-tools hidden">
+        <button type="button" id="torch-btn" class="icon-btn hidden" aria-label="Taschenlampe">🔦</button>
+        <label id="zoom-wrap" class="zoom hidden">🔍<input type="range" id="zoom-in" aria-label="Zoom"></label>
+      </div>
       <div class="scanner-idle" id="scan-idle">
         <div class="big">${live ? "📷" : "📸"}</div>
         ${live ? `<button class="btn primary big" data-cam>Kamera starten</button>`

@@ -1,5 +1,12 @@
 # Änderungen
 
+## 1.0.1
+
+- Behoben: Kategorie ließ sich beim Anlegen/Bearbeiten ab dem zweiten Produkt nicht mehr auswählen und wurde nicht gespeichert
+- Scanner: Kamera mit Full-HD-Auflösung und Dauer-Autofokus – Barcodes werden aus größerem Abstand erkannt
+- Scanner: Zoom-Regler und Taschenlampe (sofern das Handy es unterstützt, meist Android)
+- Hinweis zum idealen Abstand unter dem Scan-Rahmen
+
 ## 1.0.0
 
 - Erste Version: Barcode-Scan (Live-Kamera und Foto), Produkterkennung über Open Food/Beauty/Products Facts
