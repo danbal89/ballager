@@ -1381,8 +1381,9 @@ async function renderVorsorge() {
       }).join("")}</div>`).join("")}
 
     ${v.unmatched ? `<div class="hint info" style="margin-top:16px">🔎 <b>${v.unmatched} Produkt${v.unmatched === 1 ? "" : "e"} mit Barcode</b>
-      ${v.unmatched === 1 ? "ist" : "sind"} noch keinem Vorsorge-Posten zugeordnet. BALLager kann bei Open Food Facts nachsehen, worum es sich handelt.
-      <div style="margin-top:8px"><button class="btn small sky" data-abgleich>🔎 Jetzt genauer zuordnen</button></div></div>` : ""}
+      ${v.unmatched === 1 ? "ist" : "sind"} noch keinem Vorsorge-Posten zugeordnet. BALLager schlägt sie im Hintergrund
+      automatisch bei Open Food Facts nach (ein paar pro Minute) – oder gleich jetzt:
+      <div style="margin-top:8px"><button class="btn small sky" data-abgleich>🔎 Jetzt sofort zuordnen</button></div></div>` : ""}
     ${v.estimated.length ? `<div class="hint" style="margin-top:16px">📏 Bei <b>${v.estimated.length} Produkt${v.estimated.length === 1 ? "" : "en"}</b> fehlt die Packungsgröße – BALLager rechnet mit typischen Größen.
       Für genaue Werte antippen und „Inhalt pro Stück“ oder die Packungsgröße eintragen:
       <div class="chips" style="margin-top:8px">${v.estimated.map((e) => `<button class="chip" data-pid="${e.id}">${esc(e.name)}</button>`).join("")}</div></div>` : ""}
@@ -1420,7 +1421,8 @@ async function renderVorsorge() {
       ab.textContent = "⏳ Frage Open Food Facts …";
       return run(async () => {
         const r = await api("vorsorge/abgleich", { method: "POST" });
-        toast(r.assigned.length
+        if (r.offline && !r.checked) toast("Open Food Facts ist gerade nicht erreichbar – BALLager versucht es später automatisch.", { error: true });
+        else toast(r.assigned.length
           ? `✅ ${r.assigned.length} zugeordnet: ${r.assigned.slice(0, 3).map((a) => `${a.name} → ${a.item}`).join(", ")}${r.assigned.length > 3 ? " …" : ""}`
           : `Geprüft: ${r.checked} – keine Lebensmittel für die Vorsorge dabei`, { ms: 6000 });
         await loadItems();

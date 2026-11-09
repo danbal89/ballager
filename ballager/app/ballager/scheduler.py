@@ -6,7 +6,7 @@ import threading
 import time
 from datetime import date, datetime
 
-from . import backup, db, ha, inventory, notify
+from . import backup, db, ha, inventory, notify, prep
 
 log = logging.getLogger("ballager.scheduler")
 
@@ -68,6 +68,34 @@ def _save_state(key: str, value: str) -> None:
             db.set_setting(conn, "state", st)
 
 
+# Vorsorge-Abgleich im Hintergrund: höchstens 10 Produkte alle 2 Minuten, 1 s Pause je Anfrage
+ABGLEICH_BATCH = 10
+_next_abgleich = time.time() + 60
+
+
+def abgleich_tick() -> dict | None:
+    """Ein Schritt des Hintergrund-Abgleichs. Gibt das Ergebnis zurück (oder None, wenn nicht fällig)."""
+    global _next_abgleich
+    now = time.time()
+    if now < _next_abgleich:
+        return None
+    try:
+        res = prep.abgleich(limit=ABGLEICH_BATCH, pause=1.0)
+    except Exception:
+        log.exception("Vorsorge-Abgleich fehlgeschlagen")
+        _next_abgleich = now + 1800
+        return None
+    if res["offline"]:
+        _next_abgleich = now + 1800      # kein Internet: in 30 Minuten wieder
+    elif res["remaining"] > 0:
+        _next_abgleich = now + 120       # weiter in 2 Minuten
+    else:
+        _next_abgleich = now + 3600      # alles erledigt: stündlich nach Neuem schauen
+    if res["assigned"]:
+        trigger_sensor_update()
+    return res
+
+
 def _loop() -> None:
     last_sensor = 0.0
     while True:
@@ -75,6 +103,7 @@ def _loop() -> None:
             _tick()
         except Exception:
             log.exception("Fehler im Zeitplaner")
+        abgleich_tick()
         if _wake.is_set() or time.time() - last_sensor > 600:
             _wake.clear()
             try:

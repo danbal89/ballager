@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import urllib.error
 import urllib.request
 from typing import Optional
 
@@ -42,9 +43,19 @@ def guess_category(tags: list[str]) -> Optional[str]:
 
 
 def lookup(code: str) -> Optional[dict]:
+    return lookup_checked(code)[0]
+
+
+def lookup_checked(code: str) -> tuple[Optional[dict], bool]:
+    """Wie lookup(), meldet zusätzlich, ob überhaupt eine Datenbank geantwortet hat.
+
+    (None, True)  = erreichbar, Produkt aber unbekannt
+    (None, False) = keine Verbindung -> später nochmal versuchen
+    """
     code = re.sub(r"\D", "", code or "")
     if len(code) < 6:
-        return None
+        return None, True
+    reached = False
     for source, url, fallback_cat in SOURCES:
         try:
             req = urllib.request.Request(
@@ -53,7 +64,14 @@ def lookup(code: str) -> Optional[dict]:
             )
             with urllib.request.urlopen(req, timeout=6) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
-        except Exception as exc:  # Netzwerk weg, Timeout, 404 …
+            reached = True
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:  # Datenbank erreichbar, Produkt unbekannt
+                reached = True
+            else:
+                log.info("Suche bei %s fehlgeschlagen: HTTP %s", source, exc.code)
+            continue
+        except Exception as exc:  # Netzwerk weg, Timeout …
             log.info("Suche bei %s fehlgeschlagen: %s", source, exc)
             continue
         if data.get("status") != 1 or not data.get("product"):
@@ -75,5 +93,5 @@ def lookup(code: str) -> Optional[dict]:
             "image_url": p.get("image_front_small_url") or "",
             "category_name": guess_category(p.get("categories_tags") or []) or fallback_cat,
             "source": source,
-        }
-    return None
+        }, True
+    return None, reached

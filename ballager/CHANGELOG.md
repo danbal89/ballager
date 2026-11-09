@@ -8,7 +8,8 @@
   - Produkte werden automatisch zugeordnet (z.B. „Spaghetti“ → Teigwaren), Mengen aus der Packungsgröße gelesen
   - Beim Scannen werden zusätzlich die Produktkategorien von Open Food Facts genutzt – so wird z.B.
     „Uncle Ben's Original“ auch ohne „Reis“ im Namen als Reis erkannt
-  - Bereits erfasste Produkte lassen sich mit einem Klick nachträglich über den Barcode zuordnen
+  - Bereits erfasste Produkte werden nach dem Update automatisch im Hintergrund über ihren Barcode
+    zugeordnet (gestaffelt, ohne Internet wird später erneut versucht) – oder sofort per Knopf
   - Zuordnung und „Inhalt pro Stück“ im Produkt bearbeiten änderbar
   - Abgelaufene Ware zählt nicht mit
   - Checkliste für Hygiene, Apotheke, Licht/Radio/Kochstelle – erkennt Vorhandenes automatisch

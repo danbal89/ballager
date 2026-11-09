@@ -16,6 +16,7 @@ import sqlite3
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from datetime import date, timedelta
 from unittest import mock
@@ -47,11 +48,15 @@ class Base(unittest.TestCase):
         self._migrations = list(db.MIGRATIONS)
         self._lookup = mock.patch.object(lookup, "lookup", return_value=None)
         self.lookup_mock = self._lookup.start()
+        # nie ins Internet: lookup_checked liefert, was lookup_mock sagt, und gilt als "erreichbar"
+        self._checked = mock.patch.object(lookup, "lookup_checked", side_effect=lambda code: (self.lookup_mock(code), True))
+        self.checked_mock = self._checked.start()
         db.init()
         self.c = app.test_client()
 
     def tearDown(self):
         db.MIGRATIONS[:] = self._migrations
+        self._checked.stop()
         self._lookup.stop()
         self._env.stop()
         shutil.rmtree(self.tmp, ignore_errors=True)
@@ -779,12 +784,14 @@ class TestVorsorge(Base):
             def __exit__(self, *a):
                 return False
 
+        self._checked.stop()
         self._lookup.stop()
         try:
             with mock.patch("urllib.request.urlopen", return_value=Resp(json.dumps(fake).encode())):
                 r = self.api("GET", "barcode/5000000000001", None, 200)
         finally:
             self.lookup_mock = self._lookup.start()
+            self.checked_mock = self._checked.start()
         s = r["suggestion"]
         self.assertEqual((s["prep_group"], s["prep_name"], s["package_size"]), ("reis", "Reis", "1 kg"))
         # so wie die Oberfläche es anlegt
@@ -809,6 +816,55 @@ class TestVorsorge(Base):
         self.assertEqual(r["checked"], 0)
         self.assertEqual(self.get(a["id"])["prep_group"], "reis")
         self.lookup_mock.side_effect = None
+
+    def test_abgleich_ohne_internet_markiert_nichts(self):
+        self.product("Uncle Bens Original", qty=2, barcode="5000000000002")
+        self.checked_mock.side_effect = lambda code: (None, False)
+        r = self.api("POST", "vorsorge/abgleich", None, 200)
+        self.assertEqual((r["offline"], r["checked"]), (True, 0))
+        self.assertEqual(self.vs()["unmatched"], 1, "bei Netzausfall muss es später erneut versucht werden")
+        self.checked_mock.side_effect = lambda code: ({"prep_group": "reis", "prep_name": "Reis"}, True)
+        r = self.api("POST", "vorsorge/abgleich", None, 200)
+        self.assertEqual((r["offline"], len(r["assigned"])), (False, 1))
+
+    def test_unbekannt_oder_nicht_erreichbar(self):
+        import urllib.error
+        self._checked.stop()
+        try:
+            with mock.patch("urllib.request.urlopen",
+                            side_effect=urllib.error.HTTPError("u", 404, "Not Found", {}, None)):
+                self.assertEqual(lookup.lookup_checked("4000000000000"), (None, True))
+            with mock.patch("urllib.request.urlopen", side_effect=urllib.error.URLError("kein Netz")):
+                self.assertEqual(lookup.lookup_checked("4000000000000"), (None, False))
+            with mock.patch("urllib.request.urlopen",
+                            side_effect=urllib.error.HTTPError("u", 503, "Busy", {}, None)):
+                self.assertEqual(lookup.lookup_checked("4000000000000"), (None, False))
+        finally:
+            self.checked_mock = self._checked.start()
+
+    def test_hintergrund_abgleich_gestaffelt(self):
+        from ballager import prep, scheduler
+        for i in range(15):
+            self.product(f"Eigenmarke {i}", qty=1, barcode=f"60000000000{i:02d}")
+        self.checked_mock.side_effect = lambda code: ({"prep_group": "reis", "prep_name": "Reis"}, True)
+        with mock.patch.object(prep.time, "sleep") as slp:
+            scheduler._next_abgleich = 0
+            r1 = scheduler.abgleich_tick()
+            self.assertEqual((r1["checked"], r1["remaining"]), (10, 5))
+            self.assertAlmostEqual(scheduler._next_abgleich - time.time(), 120, delta=5)
+            self.assertIsNone(scheduler.abgleich_tick(), "vor Ablauf der Pause passiert nichts")
+            scheduler._next_abgleich = 0
+            r2 = scheduler.abgleich_tick()
+            self.assertEqual((r2["checked"], r2["remaining"]), (5, 0))
+            self.assertAlmostEqual(scheduler._next_abgleich - time.time(), 3600, delta=5)
+            self.assertEqual(slp.call_count, 9 + 4, "Pause zwischen den Anfragen")
+        self.assertEqual(self.item(self.vs(), "reis")["have"], 15)
+        self.product("Neu ohne Netz", qty=1, barcode="7000000000001")
+        self.checked_mock.side_effect = lambda code: (None, False)
+        scheduler._next_abgleich = 0
+        r3 = scheduler.abgleich_tick()
+        self.assertTrue(r3["offline"])
+        self.assertAlmostEqual(scheduler._next_abgleich - time.time(), 1800, delta=5)
 
     def test_migration_auf_schema_2_mit_bestehenden_daten(self):
         """Simuliert den Stand von 1.0.2 (Schema 1) mit Daten und spielt das Update ein."""

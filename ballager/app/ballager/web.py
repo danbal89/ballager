@@ -161,23 +161,7 @@ def vorsorge():
 @app.post("/api/vorsorge/abgleich")
 def vorsorge_abgleich():
     """Schlägt nicht zugeordnete Produkte einmalig über den Barcode bei Open Food Facts nach."""
-    limit = 40
-    with db.session() as conn:
-        cands = prep.abgleich_candidates(inventory.inventory(conn), prep.get_settings(conn))
-    assigned, checked_ids = [], []
-    for p in cands[:limit]:
-        s = lookup.lookup(p["barcode"])
-        checked_ids.append(p["id"])
-        if s and s.get("prep_group") not in (None, "auto"):
-            with db.session() as conn:
-                with db.tx(conn):
-                    conn.execute("UPDATE products SET prep_group=?, updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now') "
-                                 "WHERE id=? AND prep_group='auto'", (s["prep_group"], p["id"]))
-            assigned.append({"id": p["id"], "name": p["name"], "item": s["prep_name"]})
-    with db.session() as conn:
-        with db.tx(conn):
-            prep.mark_checked(conn, checked_ids)
-    return jsonify(checked=len(checked_ids), assigned=assigned, remaining=max(0, len(cands) - limit))
+    return jsonify(prep.abgleich(limit=40))
 
 
 @app.put("/api/vorsorge")

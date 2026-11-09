@@ -64,8 +64,9 @@ mit der **Vorratsliste des Österreichischen Zivilschutzverbands** (Mengen pro P
   (z.B. „Reis“, „Nudeln“, „Fischkonserven“) – das klappt auch, wenn der Name nichts verrät.
   Sonst wird am Namen erkannt („Spaghetti“ → Teigwaren, „Basmati“ → Reis).
   Bei Produkten der Kategorie *Konserven* zählt alles Übrige als Konservendose.
-- **Bestehende Produkte:** Auf der Vorsorge-Seite „Jetzt genauer zuordnen“ – schlägt noch nicht zugeordnete
-  Produkte einmalig über ihren Barcode nach.
+- **Bestehende Produkte:** werden automatisch im Hintergrund über ihren Barcode nachgeschlagen
+  (höchstens 10 alle 2 Minuten; ohne Internet wird es später erneut versucht). Sofort geht es auf der
+  Vorsorge-Seite mit „Jetzt sofort zuordnen“. Jedes Produkt wird nur einmal nachgeschlagen.
 - **Mengen:** aus der Packungsgröße („500 g“, „6 x 1,5 l“). Fehlt sie, rechnet BALLager mit einer typischen Größe
   und weist darauf hin („geschätzt“). Genauer wird es, wenn ihr die Packungsgröße eintragt.
 - **Ändern:** Produkt bearbeiten → Abschnitt *Krisenvorsorge*: andere Gruppe wählen, „Nicht mitzählen“ oder

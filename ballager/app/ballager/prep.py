@@ -5,12 +5,16 @@ Mengen pro Person und Woche). Empfohlen wird ein Vorrat für mindestens 7 Tage, 
 """
 from __future__ import annotations
 
+import logging
 import math
 import re
+import time
 from datetime import date
 from typing import Optional
 
 from . import db
+
+log = logging.getLogger("ballager.prep")
 
 SOURCE = "Österreichischer Zivilschutzverband – Vorrats-Checkliste (Vorratsliste pro Person und Woche)"
 SOURCE_URL = "https://www.zivilschutz.at/wp-content/uploads/2022/09/Vorrat_Checkliste_Web-small-rgb.pdf"
@@ -292,3 +296,37 @@ def mark_checked(conn, ids: list[int]) -> None:
     cfg = get_settings(conn)
     cfg["checked"] = sorted(set(cfg.get("checked") or []) | set(ids))[-5000:]
     db.set_setting(conn, "prep", cfg)
+
+
+def abgleich(limit: int = 40, pause: float = 0.0) -> dict:
+    """Ordnet noch nicht erkannte Produkte über ihren Barcode (Open Food Facts) einem Vorsorge-Posten zu.
+
+    Jedes Produkt wird nur einmal nachgeschlagen. Ist keine Datenbank erreichbar, wird abgebrochen
+    und NICHTS als geprüft markiert – beim nächsten Mal wird es erneut versucht.
+    """
+    from . import inventory, lookup  # lokal: vermeidet Import-Kreis (lookup nutzt prep)
+    with db.session() as conn:
+        cands = abgleich_candidates(inventory.inventory(conn), get_settings(conn))
+    assigned, checked_ids, offline = [], [], False
+    for i, p in enumerate(cands[:limit]):
+        if i and pause:
+            time.sleep(pause)
+        found, reached = lookup.lookup_checked(p["barcode"])
+        if not reached:
+            offline = True
+            break
+        checked_ids.append(p["id"])
+        if found and found.get("prep_group") not in (None, "auto"):
+            with db.session() as conn:
+                with db.tx(conn):
+                    conn.execute("UPDATE products SET prep_group=?, updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now') "
+                                 "WHERE id=? AND prep_group='auto'", (found["prep_group"], p["id"]))
+            assigned.append({"id": p["id"], "name": p["name"], "item": found["prep_name"]})
+    if checked_ids:
+        with db.session() as conn:
+            with db.tx(conn):
+                mark_checked(conn, checked_ids)
+    if assigned:
+        log.info("Vorsorge-Abgleich: %s", ", ".join(f"{a['name']} → {a['item']}" for a in assigned))
+    return {"checked": len(checked_ids), "assigned": assigned,
+            "remaining": len(cands) - len(checked_ids), "offline": offline}
