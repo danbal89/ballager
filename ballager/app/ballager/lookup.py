@@ -7,7 +7,7 @@ import re
 import urllib.request
 from typing import Optional
 
-from . import __version__
+from . import __version__, prep
 
 log = logging.getLogger("ballager.lookup")
 
@@ -63,7 +63,11 @@ def lookup(code: str) -> Optional[dict]:
         if not name:
             continue
         brand = (p.get("brands") or "").split(",")[0].strip()
+        tags = p.get("categories_tags") or []
+        prep_item = prep.detect_from_tags(tags)
         return {
+            "prep_group": prep_item or "auto",
+            "prep_name": prep.ITEM_BY_ID[prep_item]["name"] if prep_item else "",
             "barcode": code,
             "name": name,
             "brand": brand,

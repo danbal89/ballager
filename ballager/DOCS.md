@@ -60,8 +60,12 @@ Die Seite **Krisenvorsorge** (Kachel auf der Übersicht, oder *Mehr → Krisenvo
 mit der **Vorratsliste des Österreichischen Zivilschutzverbands** (Mengen pro Person und Woche). Standard sind
 **4 Personen und 14 Tage**; der Zivilschutz empfiehlt mindestens 7 Tage, besser 2 Wochen.
 
-- **Automatische Zuordnung:** Produkte werden am Namen erkannt („Spaghetti“ → Teigwaren, „Thunfisch“ → Fischkonserven).
+- **Automatische Zuordnung:** Beim Scannen nutzt BALLager die Produktkategorien von Open Food Facts
+  (z.B. „Reis“, „Nudeln“, „Fischkonserven“) – das klappt auch, wenn der Name nichts verrät.
+  Sonst wird am Namen erkannt („Spaghetti“ → Teigwaren, „Basmati“ → Reis).
   Bei Produkten der Kategorie *Konserven* zählt alles Übrige als Konservendose.
+- **Bestehende Produkte:** Auf der Vorsorge-Seite „Jetzt genauer zuordnen“ – schlägt noch nicht zugeordnete
+  Produkte einmalig über ihren Barcode nach.
 - **Mengen:** aus der Packungsgröße („500 g“, „6 x 1,5 l“). Fehlt sie, rechnet BALLager mit einer typischen Größe
   und weist darauf hin („geschätzt“). Genauer wird es, wenn ihr die Packungsgröße eintragt.
 - **Ändern:** Produkt bearbeiten → Abschnitt *Krisenvorsorge*: andere Gruppe wählen, „Nicht mitzählen“ oder

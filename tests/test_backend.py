@@ -742,6 +742,74 @@ class TestVorsorge(Base):
         self.api("PUT", "vorsorge", {"persons": 0}, 200)
         self.assertEqual(self.vs()["persons"], 1)
 
+    def test_open_food_facts_kategorien(self):
+        from ballager import prep
+        cases = [
+            (["en:cereals-and-potatoes", "en:cereal-grains", "en:rices", "en:basmati-rices"], "reis"),
+            (["en:fats", "en:vegetable-fats", "en:vegetable-oils", "en:sunflower-oils"], "oel"),        # nicht Streichfett
+            (["en:cereals-and-potatoes", "en:breads", "en:crispbreads"], "brot"),                      # nicht Kartoffeln
+            (["en:canned-foods", "en:fishes", "en:canned-fishes", "en:sardines", "en:sardines-in-sunflower-oil"], "fisch"),
+            (["en:cereal-pastas", "en:dry-pastas", "en:spaghetti"], "teigwaren"),
+            (["en:spreads", "en:sweet-spreads", "en:hazelnut-spreads"], "marmelade"),
+            (["en:canned-foods", "en:canned-legumes", "en:canned-chickpeas"], "konserven"),
+            (["en:beverages", "en:waters", "en:mineral-waters"], "wasser"),
+            (["en:dairies", "en:milks", "en:uht-milks"], "milch"),
+            (["en:spreads", "en:peanut-butters"], None),        # Erdnussbutter ist kein Streichfett
+            (["en:coconut-milks"], None),
+            (["en:puffed-rices", "en:rice-cakes"], None),       # Reiswaffeln
+            (["en:snacks", "en:crisps", "en:potato-crisps"], None),
+            ([], None),
+        ]
+        for tags, want in cases:
+            self.assertEqual(prep.detect_from_tags(tags), want, tags)
+        self.assertEqual(prep.detect_item("Uncle Ben's Original Langkorn"), "reis")
+        self.assertEqual(prep.detect_item("Riso Arborio"), "reis")
+        self.assertIsNone(prep.detect_item("Kartoffelchips Paprika"))
+
+    def test_scan_uebernimmt_vorsorge_gruppe(self):
+        fake = {"status": 1, "product": {"product_name_de": "Original Langkorn", "brands": "Uncle Ben's",
+                                         "quantity": "1 kg", "categories_tags": ["en:cereal-grains", "en:rices", "en:long-grain-rices"]}}
+
+        class Resp(io.BytesIO):
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        self._lookup.stop()
+        try:
+            with mock.patch("urllib.request.urlopen", return_value=Resp(json.dumps(fake).encode())):
+                r = self.api("GET", "barcode/5000000000001", None, 200)
+        finally:
+            self.lookup_mock = self._lookup.start()
+        s = r["suggestion"]
+        self.assertEqual((s["prep_group"], s["prep_name"], s["package_size"]), ("reis", "Reis", "1 kg"))
+        # so wie die Oberfläche es anlegt
+        self.api("POST", "products", {"name": s["name"], "brand": s["brand"], "package_size": s["package_size"],
+                                      "barcode": "5000000000001", "prep_group": s["prep_group"],
+                                      "stock": {"quantity": 3}}, 201)
+        self.assertEqual(self.item(self.vs(), "reis")["have"], 3)
+
+    def test_nachtraeglicher_abgleich(self):
+        a = self.product("Uncle Bens Original", qty=2, barcode="5000000000002", package_size="500 g")
+        self.product("Klopapier", qty=12, barcode="5000000000003")
+        self.product("Spaghetti", qty=1, barcode="5000000000004")      # schon per Name erkannt -> kein Kandidat
+        self.assertEqual(self.vs()["unmatched"], 2)
+        self.lookup_mock.side_effect = lambda code: (
+            {"prep_group": "reis", "prep_name": "Reis"} if code == "5000000000002" else None)
+        r = self.api("POST", "vorsorge/abgleich", None, 200)
+        self.assertEqual((r["checked"], [x["name"] for x in r["assigned"]]), (2, ["Uncle Bens Original"]))
+        v = self.vs()
+        self.assertEqual(self.item(v, "reis")["have"], 1)
+        self.assertEqual(v["unmatched"], 0, "einmal geprüfte Produkte werden nicht erneut angeboten")
+        r = self.api("POST", "vorsorge/abgleich", None, 200)
+        self.assertEqual(r["checked"], 0)
+        self.assertEqual(self.get(a["id"])["prep_group"], "reis")
+        self.lookup_mock.side_effect = None
+
     def test_migration_auf_schema_2_mit_bestehenden_daten(self):
         """Simuliert den Stand von 1.0.2 (Schema 1) mit Daten und spielt das Update ein."""
         shutil.rmtree(db.DATA_DIR)

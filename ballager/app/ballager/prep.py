@@ -35,9 +35,9 @@ ITEMS: list[dict] = [
     {"id": "saft", "group": "getraenke", "name": "Frucht- & Gemüsesäfte", "unit": "l", "per_week": 1, "typical": 1.0,
      "kw": r"saft|nektar"},
     {"id": "mehl", "group": "getreide", "name": "Mehl", "unit": "kg", "per_week": 1, "typical": 1.0,
-     "kw": r"mehl(?!speise)|grieß|griess"},
+     "kw": r"mehl(?!speise)|grieß|griess|\bfarina\b|\bflour\b"},
     {"id": "reis", "group": "getreide", "name": "Reis", "unit": "kg", "per_week": 1, "typical": 1.0,
-     "kw": r"(?<!milch)reis\b|risotto|basmati|jasmin"},
+     "kw": r"(?<!milch)reis\b|risotto|basmati|jasmin|langkorn|rundkorn|arborio|carnaroli|\briso\b|\brice\b|\briz\b"},
     {"id": "teigwaren", "group": "getreide", "name": "Teigwaren", "unit": "kg", "per_week": 0.5, "typical": 0.5,
      "kw": r"nudel|spaghetti|penne|fusilli|teigwar|pasta|makkaroni|maccheroni|spätzle|lasagne|farfalle|tagliatelle"},
     {"id": "brot", "group": "getreide", "name": "Brot (haltbar)", "unit": "kg", "per_week": 1, "typical": 0.5,
@@ -45,7 +45,7 @@ ITEMS: list[dict] = [
      "kw": r"brot(?!aufstrich)|knäcke|knaecke|zwieback|grissini|cracker|toast"},
     {"id": "kartoffeln", "group": "getreide", "name": "Kartoffeln", "unit": "kg", "per_week": 2, "typical": 2.0,
      "hint": "auch Kartoffelpüree-Pulver",
-     "kw": r"kartoffel|erdäpfel|erdaepfel|püree|pueree"},
+     "kw": r"kartoffel(?!chip|snack|stick)|erdäpfel(?!chip)|erdaepfel|püree|pueree"},
     {"id": "konserven", "group": "gemuese", "name": "Konservendosen", "unit": "stk", "per_week": 7,
      "hint": "z.B. Tomaten, Pfirsiche, Bohnen, Mais",
      "kw": r"dose|bohnen|mais|erbsen|linsen|kichererbsen|tomate|pfirsich|ananas|birne|obstsalat|fruchtcocktail|eintopf|ravioli|gulasch"},
@@ -73,6 +73,38 @@ ITEM_BY_ID = {i["id"]: i for i in ITEMS}
 DETECT_ORDER = ["marmelade", "fisch", "aufstrich", "saft", "milch", "kaese", "streichfett", "oel", "mehl", "reis",
                 "teigwaren", "kartoffeln", "brot", "salate", "wasser", "konserven"]
 
+# Open-Food-Facts-Kategorien (categories_tags) -> Vorsorge-Posten. Reihenfolge = Vorrang
+# (z.B. Fischkonserve vor allgemeiner Konserve). Bewusst exakte Endungen, damit z.B.
+# „en:fats“ (auch bei Öl) nicht als Streichfett zählt und „en:cereals-and-potatoes“ nicht als Kartoffeln.
+TAG_RULES: list[tuple[str, str]] = [
+    ("fisch", r"^en:(canned-[a-z-]*(fishes|tunas|sardines|mackerels|herrings|salmons?|anchovies)|tunas|sardines|mackerels)$"),
+    ("aufstrich", r"^en:([a-z-]+-)?(pates|meat-spreads|liver-sausages?)$"),
+    ("marmelade", r"^en:([a-z-]+-)?(jams|marmalades|honeys|hazelnut-spreads|fruit-spreads|jellies)$"),
+    ("saft", r"^en:([a-z-]+-)?(juices|nectars)$"),
+    ("milch", r"^en:(?!coconut)([a-z-]+-)?(milks|milk-powders|powdered-milks|plant-milks|plant-based-milk-alternatives)$"),
+    ("kaese", r"^en:([a-z-]+-)?cheeses$"),
+    ("streichfett", r"^en:(butters|salted-butters|unsalted-butters|margarines|spreadable-fats|lards|ghee|clarified-butters)$"),
+    ("oel", r"^en:(?!essential)([a-z-]+-)?oils$"),
+    ("mehl", r"^en:([a-z-]+-)?flours$"),
+    ("reis", r"^en:(?!puffed)([a-z-]+-)?rices$"),
+    ("teigwaren", r"^en:([a-z-]+-)?(pastas?|noodles|spaghetti|macaroni|tagliatelle|lasagna-sheets)$"),
+    ("brot", r"^en:([a-z-]+-)?(crispbreads|rusks|breads|toasts)$"),
+    ("kartoffeln", r"^en:(potatoes|mashed-potatoes|potato-flakes|dehydrated-mashed-potatoes|instant-mashed-potatoes)$"),
+    ("salate", r"^en:([a-z-]+-)?(pickles|gherkins|pickled-cucumbers|sauerkrauts|pickled-vegetables|olives)$"),
+    ("wasser", r"^en:([a-z-]+-)?waters$"),
+    ("konserven", r"^en:canned-"),
+]
+
+
+def detect_from_tags(tags: list[str]) -> Optional[str]:
+    """Vorsorge-Posten aus den Open-Food-Facts-Kategorien eines Produkts."""
+    tags = [t.lower() for t in tags or []]
+    for item_id, pattern in TAG_RULES:
+        rx = re.compile(pattern)
+        if any(rx.match(t) for t in tags):
+            return item_id
+    return None
+
 CHECKLIST = [
     {"id": "toilettenpapier", "group": "Körperpflege & Hygiene", "name": "Toilettenpapier", "kw": r"klopapier|toilettenpapier|wc-papier"},
     {"id": "notklo", "group": "Körperpflege & Hygiene", "name": "Not-Toilettenbeutel", "kw": r"toilettenbeutel|notklo|not-wc"},
@@ -94,7 +126,7 @@ CHECKLIST = [
     {"id": "haustier", "group": "Wichtiges", "name": "Wasser & Futter für Haustiere (falls vorhanden)", "kw": r"tierfutter|katzenfutter|hundefutter", "cat": "Tierbedarf"},
 ]
 
-DEFAULT_SETTINGS = {"persons": 4, "days": 14, "checklist": {}}
+DEFAULT_SETTINGS = {"persons": 4, "days": 14, "checklist": {}, "checked": []}
 
 
 # --------------------------------------------------------------------------
@@ -228,6 +260,7 @@ def evaluate(conn, products: list[dict]) -> dict:
     return {
         "persons": persons, "days": days, "source": SOURCE, "source_url": SOURCE_URL,
         "score": round(pct_sum / n, 3) if n else 0, "water_days": round(water_days, 1),
+        "unmatched": len(abgleich_candidates(products, cfg)),
         "groups": groups, "estimated": estimated,
         "checklist": checklist, "checklist_done": done, "checklist_total": len(checklist),
         "items": [{"id": i["id"], "name": i["name"], "unit": i["unit"], "group": i["group"]} for i in ITEMS],
@@ -245,3 +278,17 @@ def save_settings(conn, data: dict) -> dict:
         cfg["checklist"] = {k: bool(v) for k, v in data["checklist"].items() if k in valid}
     db.set_setting(conn, "prep", cfg)
     return cfg
+
+
+def abgleich_candidates(products: list[dict], cfg: dict) -> list[dict]:
+    """Produkte mit Barcode, die (noch) keinem Vorsorge-Posten zugeordnet sind und nie nachgeschlagen wurden."""
+    checked = set(cfg.get("checked") or [])
+    return [p for p in products
+            if p.get("barcode") and (p.get("prep_group") or "auto") == "auto"
+            and p["id"] not in checked and not product_contribution(p).get("item")]
+
+
+def mark_checked(conn, ids: list[int]) -> None:
+    cfg = get_settings(conn)
+    cfg["checked"] = sorted(set(cfg.get("checked") or []) | set(ids))[-5000:]
+    db.set_setting(conn, "prep", cfg)

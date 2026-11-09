@@ -172,7 +172,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         },
     },
     "ui": {"soon_days": 30},
-    "prep": {"persons": 4, "days": 14, "checklist": {}},
+    "prep": {"persons": 4, "days": 14, "checklist": {}, "checked": []},
     "state": {"last_notify_date": "", "last_backup_date": ""},
 }
 

@@ -315,13 +315,15 @@ document.addEventListener("click", (e) => {
 });
 
 function newProductSheet(prefill = {}, onDone) {
-  const sug = prefill.source ? `<div class="hint info" style="margin-bottom:12px">✨ Gefunden bei ${esc(prefill.source)} – bitte kurz prüfen.</div>` : (prefill.barcode ? `<div class="hint" style="margin-bottom:12px">🤔 Barcode ${esc(prefill.barcode)} ist noch unbekannt. Einmal anlegen – beim nächsten Scan wird es automatisch erkannt.</div>` : "");
+  const sug = prefill.source ? `<div class="hint info" style="margin-bottom:12px">✨ Gefunden bei ${esc(prefill.source)} – bitte kurz prüfen.
+      ${prefill.prep_name ? `<div class="tiny" style="margin-top:4px">🛡️ Zählt bei der Krisenvorsorge als <b>${esc(prefill.prep_name)}</b></div>` : ""}</div>` : (prefill.barcode ? `<div class="hint" style="margin-bottom:12px">🤔 Barcode ${esc(prefill.barcode)} ist noch unbekannt. Einmal anlegen – beim nächsten Scan wird es automatisch erkannt.</div>` : "");
   const body = openSheet(`
     <div class="prod-head">${prefill.image_url ? avatar({ ...prefill, category_color: "#FFC145" }, true) : `<div class="avatar" style="background:var(--sun-l)">✨</div>`}
       <div><h2>Neues Produkt</h2><div class="muted small">einmal anlegen, dann nur noch scannen</div></div></div>
     ${sug}
     <form class="form-grid" id="pform" autocomplete="off">
       ${productFields(prefill)}
+      <input type="hidden" name="prep_group" value="${esc(prefill.prep_group || "auto")}">
       <div class="full section-title" style="margin:10px 0 0"><h3>📥 Jetzt einlagern</h3></div>
       ${stockFields(prefill)}
       <button class="btn primary big full" type="submit">Speichern & einlagern</button>
@@ -1378,6 +1380,9 @@ async function renderVorsorge() {
         </div>`;
       }).join("")}</div>`).join("")}
 
+    ${v.unmatched ? `<div class="hint info" style="margin-top:16px">🔎 <b>${v.unmatched} Produkt${v.unmatched === 1 ? "" : "e"} mit Barcode</b>
+      ${v.unmatched === 1 ? "ist" : "sind"} noch keinem Vorsorge-Posten zugeordnet. BALLager kann bei Open Food Facts nachsehen, worum es sich handelt.
+      <div style="margin-top:8px"><button class="btn small sky" data-abgleich>🔎 Jetzt genauer zuordnen</button></div></div>` : ""}
     ${v.estimated.length ? `<div class="hint" style="margin-top:16px">📏 Bei <b>${v.estimated.length} Produkt${v.estimated.length === 1 ? "" : "en"}</b> fehlt die Packungsgröße – BALLager rechnet mit typischen Größen.
       Für genaue Werte antippen und „Inhalt pro Stück“ oder die Packungsgröße eintragen:
       <div class="chips" style="margin-top:8px">${v.estimated.map((e) => `<button class="chip" data-pid="${e.id}">${esc(e.name)}</button>`).join("")}</div></div>` : ""}
@@ -1409,6 +1414,19 @@ async function renderVorsorge() {
   view.onclick = (e) => {
     const dd = e.target.closest("[data-days]");
     if (dd) return save({ days: Number(dd.dataset.days) });
+    const ab = e.target.closest("[data-abgleich]");
+    if (ab) {
+      ab.disabled = true;
+      ab.textContent = "⏳ Frage Open Food Facts …";
+      return run(async () => {
+        const r = await api("vorsorge/abgleich", { method: "POST" });
+        toast(r.assigned.length
+          ? `✅ ${r.assigned.length} zugeordnet: ${r.assigned.slice(0, 3).map((a) => `${a.name} → ${a.item}`).join(", ")}${r.assigned.length > 3 ? " …" : ""}`
+          : `Geprüft: ${r.checked} – keine Lebensmittel für die Vorsorge dabei`, { ms: 6000 });
+        await loadItems();
+        renderVorsorge();
+      }).finally(() => { ab.disabled = false; });
+    }
     const pp = e.target.closest("[data-pid]");
     if (pp) { e.stopPropagation(); return run(async () => { await loadItems(); const p = findItem(Number(pp.dataset.pid)); if (p) editProductSheet(p, () => renderVorsorge()); }); }
     const ck = e.target.closest("[data-check]");
