@@ -12,7 +12,7 @@ from datetime import datetime
 
 from flask import Flask, Response, abort, jsonify, request, send_file, send_from_directory
 
-from . import __version__, backup, db, email_providers, ha, inventory, lookup, notify, scheduler
+from . import __version__, backup, db, email_providers, ha, inventory, lookup, notify, prep, scheduler
 from .inventory import ValidationError
 
 log = logging.getLogger("ballager.web")
@@ -146,7 +146,24 @@ def dashboard():
 @app.get("/api/inventory")
 def get_inventory():
     with db.session() as conn:
-        return jsonify(items=inventory.inventory(conn))
+        items = inventory.inventory(conn)
+    for p in items:
+        p["prep"] = prep.product_contribution(p)
+    return jsonify(items=items, prep_items=[{"id": i["id"], "name": i["name"], "unit": i["unit"]} for i in prep.ITEMS])
+
+
+@app.get("/api/vorsorge")
+def vorsorge():
+    with db.session() as conn:
+        return jsonify(prep.evaluate(conn, inventory.inventory(conn)))
+
+
+@app.put("/api/vorsorge")
+def vorsorge_save():
+    with db.session() as conn:
+        with db.tx(conn):
+            prep.save_settings(conn, body())
+        return jsonify(prep.evaluate(conn, inventory.inventory(conn)))
 
 
 @app.get("/api/shopping")
@@ -169,7 +186,7 @@ def history():
 # Produkte
 # --------------------------------------------------------------------------
 PRODUCT_FIELDS = ("barcode", "name", "brand", "category_id", "default_location_id", "unit",
-                  "package_size", "min_stock", "notes", "image_url")
+                  "package_size", "min_stock", "notes", "image_url", "prep_group", "content_amount")
 
 
 def _product_values(d: dict) -> dict:
@@ -186,6 +203,16 @@ def _product_values(d: dict) -> dict:
             out[f] = "".join(ch for ch in str(v or "") if ch.isalnum())[:64] or None
         elif f == "unit":
             out[f] = _str(v, 20) or "Stk"
+        elif f == "prep_group":
+            g = _str(v, 30) or "auto"
+            if g not in ("auto", "none") and g not in prep.ITEM_BY_ID:
+                raise ValidationError("Unbekannte Vorsorge-Gruppe")
+            out[f] = g
+        elif f == "content_amount":
+            s = str(v).replace(",", ".").strip() if v not in (None, "") else ""
+            out[f] = float(s) if s else None
+            if out[f] is not None and not (0 < out[f] <= 1000):
+                raise ValidationError("Inhalt pro Stück muss zwischen 0 und 1000 liegen")
         else:
             out[f] = _str(v, 1000)
     return out

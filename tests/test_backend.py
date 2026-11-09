@@ -481,8 +481,8 @@ class TestUpdates(Base):
         self.assertEqual([r[:13] for r in after["products"]], [r[:13] for r in before["products"]])
         for t in ("stock", "movements", "categories", "locations"):
             self.assertEqual(before[t], after[t])
-        self.assertEqual(db.STATUS["schema"], 2)
-        copies = [f for f in os.listdir(db.DATA_DIR) if f.startswith("vor-update-schema1-")]
+        self.assertEqual(db.STATUS["schema"], len(self._migrations) + 1)
+        copies = [f for f in os.listdir(db.DATA_DIR) if f.startswith(f"vor-update-schema{len(self._migrations)}-")]
         self.assertEqual(len(copies), 1, "Sicherheitskopie vor dem Update fehlt")
         self.assertConsistent()
 
@@ -493,7 +493,7 @@ class TestUpdates(Base):
         with self.assertRaises(sqlite3.OperationalError):
             db.init()
         with db.session() as conn:
-            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 1)
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], len(self._migrations))
             cols = [r[1] for r in conn.execute("PRAGMA table_info(products)")]
         self.assertNotIn("neu", cols, "halbe Migration darf nicht übrig bleiben")
         self.assertEqual(before, self._fingerprint())
@@ -665,6 +665,104 @@ class TestEmail(Base):
         self.assertTrue(any(p["id"] == "gmail" for p in r["email_providers"]))
         body["notify"]["email"]["provider"] = "gibtsnicht"
         self.api("PUT", "settings", body, 400)
+
+
+class TestVorsorge(Base):
+    def vs(self):
+        return self.api("GET", "vorsorge", None, 200)
+
+    def item(self, v, iid):
+        return next(i for g in v["groups"] for i in g["items"] if i["id"] == iid)
+
+    def test_mengen_erkennen(self):
+        from ballager import prep
+        self.assertEqual(prep.parse_amount("500 g"), (0.5, "kg"))
+        self.assertEqual(prep.parse_amount("6 x 1,5 l"), (9.0, "l"))
+        self.assertEqual(prep.parse_amount("25 dag"), (0.25, "kg"))
+        self.assertIsNone(prep.parse_amount("Packung"))
+        for name, want in [("Weizenmehl glatt", "mehl"), ("Thunfisch in Öl", "fisch"), ("Milchschokolade", None),
+                           ("Fruchtaufstrich", "marmelade"), ("Butter", "streichfett"), ("Spaghetti", "teigwaren")]:
+            self.assertEqual(prep.detect_item(name), want, name)
+
+    def test_ziele_fuer_vier_personen_14_tage(self):
+        v = self.vs()
+        self.assertEqual((v["persons"], v["days"]), (4, 14))
+        self.assertEqual(self.item(v, "wasser")["target"], 112)
+        self.assertEqual(self.item(v, "konserven")["target"], 56)
+        self.assertEqual(self.item(v, "teigwaren")["target"], 4)
+        self.assertEqual(self.item(v, "aufstrich")["target"], 4, "Fleischaufstrich: 1 Dose pro Person, unabhängig von Tagen")
+        self.assertEqual(v["score"], 0)
+
+    def test_abgleich_mit_vorrat(self):
+        self.product("Weizenmehl glatt", qty=8, package_size="1 kg", exp=d(300))
+        self.product("Vöslauer Mineralwasser", qty=10, package_size="6 x 1,5 l")
+        self.product("Spaghetti", qty=4)                              # ohne Größe -> geschätzt 0,5 kg
+        self.product("Reis alt", qty=5, package_size="1 kg", exp=d(-10))   # abgelaufen -> zählt nicht
+        self.product("Kichererbsen", qty=3, category_id=self.cat_id("Konserven"))
+        v = self.vs()
+        self.assertEqual(self.item(v, "mehl")["have"], 8)
+        self.assertEqual(self.item(v, "mehl")["pct"], 1)
+        self.assertEqual(self.item(v, "wasser")["have"], 90)
+        self.assertAlmostEqual(v["water_days"], 11.2, places=1)
+        self.assertEqual(self.item(v, "teigwaren")["have"], 2)
+        self.assertEqual([e["name"] for e in v["estimated"]], ["Spaghetti"])
+        reis = self.item(v, "reis")
+        self.assertEqual((reis["have"], reis["expired"]), (0, 5))
+        self.assertEqual(self.item(v, "konserven")["have"], 3)
+        self.assertGreater(v["score"], 0)
+        self.assertLess(v["score"], 1)
+
+    def test_manuelle_zuordnung_und_inhalt(self):
+        p = self.product("Omas Spezial", qty=3)
+        v = self.vs()
+        self.assertFalse(any(pp["id"] == p["id"] for g in v["groups"] for i in g["items"] for pp in i["products"]))
+        self.api("PUT", f"products/{p['id']}", {"prep_group": "oel", "content_amount": "0,75"}, 200)
+        self.assertEqual(self.item(self.vs(), "oel")["have"], 2.25)
+        q = self.product("Mineralwasser", qty=6, package_size="1,5 l")
+        self.api("PUT", f"products/{q['id']}", {"prep_group": "none"}, 200)
+        self.assertEqual(self.item(self.vs(), "wasser")["have"], 0)
+        self.api("PUT", f"products/{p['id']}", {"prep_group": "gibtsnicht"}, 400)
+        self.api("PUT", f"products/{p['id']}", {"content_amount": "-1"}, 400)
+        self.api("PUT", f"products/{p['id']}", {"content_amount": "viel"}, 400)
+        k = self.product("Kartoffeln lose", qty=5, unit="kg")
+        self.assertEqual(self.item(self.vs(), "kartoffeln")["have"], 5)
+        self.api("DELETE", f"products/{k['id']}", None, 200)
+
+    def test_einstellungen_und_checkliste(self):
+        self.product("Klopapier", qty=12, unit="Rolle")
+        v = self.api("PUT", "vorsorge", {"persons": 2, "days": 7, "checklist": {"radio": True, "bargeld": True, "hack": True}}, 200)
+        self.assertEqual(self.item(v, "wasser")["target"], 28)
+        checks = {c["id"]: c for c in v["checklist"]}
+        self.assertTrue(checks["toilettenpapier"]["checked"])
+        self.assertTrue(checks["toilettenpapier"]["found"])
+        self.assertTrue(checks["radio"]["checked"])
+        self.assertFalse(checks["kocher"]["checked"])
+        with db.session() as conn:
+            self.assertNotIn("hack", db.get_setting(conn, "prep")["checklist"])
+        self.api("PUT", "vorsorge", {"persons": 0}, 200)
+        self.assertEqual(self.vs()["persons"], 1)
+
+    def test_migration_auf_schema_2_mit_bestehenden_daten(self):
+        """Simuliert den Stand von 1.0.2 (Schema 1) mit Daten und spielt das Update ein."""
+        shutil.rmtree(db.DATA_DIR)
+        db.MIGRATIONS[:] = self._migrations[:1]
+        db.init()
+        for i in range(10):
+            with db.session() as conn:
+                with db.tx(conn):
+                    conn.execute("INSERT INTO products(name, package_size) VALUES (?, '1 kg')", (f"Mehl {i}",))
+                    inventory.add_stock(conn, i + 1, 2, None, d(100))
+        db.MIGRATIONS[:] = self._migrations
+        db.init()
+        with db.session() as conn:
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], len(self._migrations))
+            rows = conn.execute("SELECT name, prep_group, content_amount FROM products ORDER BY id").fetchall()
+            self.assertEqual(len(rows), 10)
+            self.assertTrue(all(r["prep_group"] == "auto" and r["content_amount"] is None for r in rows))
+            self.assertEqual(conn.execute("SELECT SUM(quantity) FROM stock").fetchone()[0], 20)
+        self.assertTrue(any(f.startswith("vor-update-schema1-") for f in os.listdir(db.DATA_DIR)))
+        self.assertEqual(self.item(self.vs(), "mehl")["have"], 20)
+        self.assertConsistent()
 
 
 class TestMigrationsZerleger(unittest.TestCase):

@@ -110,6 +110,13 @@ MIGRATIONS: list[str] = [
         value TEXT NOT NULL
     );
     """,
+    # ---- Version 2 (BALLager 1.0.3): Krisenvorsorge ------------------------
+    # prep_group: 'auto' = am Namen erkennen, 'none' = nicht mitzählen, sonst Posten-ID (prep.ITEMS)
+    # content_amount: Inhalt pro Stück in kg bzw. Liter (NULL = aus Packungsgröße ableiten)
+    """
+    ALTER TABLE products ADD COLUMN prep_group TEXT NOT NULL DEFAULT 'auto';
+    ALTER TABLE products ADD COLUMN content_amount REAL CHECK (content_amount IS NULL OR content_amount > 0);
+    """,
 ]
 
 DEFAULT_CATEGORIES = [
@@ -165,6 +172,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         },
     },
     "ui": {"soon_days": 30},
+    "prep": {"persons": 4, "days": 14, "checklist": {}},
     "state": {"last_notify_date": "", "last_backup_date": ""},
 }
 

@@ -1,5 +1,18 @@
 # Änderungen
 
+## 1.0.3
+
+- Neue Seite **Krisenvorsorge**: vergleicht den Vorrat mit der Vorratsliste des Österreichischen
+  Zivilschutzverbands (Standard: 4 Personen, 14 Tage – beides einstellbar)
+  - 16 Lebensmittel-Posten mit Fortschrittsbalken, „fehlt noch“, Gesamtwert und Wasser-Reichweite in Tagen
+  - Produkte werden automatisch zugeordnet (z.B. „Spaghetti“ → Teigwaren), Mengen aus der Packungsgröße gelesen
+  - Zuordnung und „Inhalt pro Stück“ im Produkt bearbeiten änderbar
+  - Abgelaufene Ware zählt nicht mit
+  - Checkliste für Hygiene, Apotheke, Licht/Radio/Kochstelle – erkennt Vorhandenes automatisch
+  - Fehlendes als Einkaufsliste teilen; Kachel auf der Übersicht
+- Datenbank-Schema 2 (zwei neue Produktfelder) – automatische Sicherheitskopie vor dem Update
+- Behoben: Mengenauswahl beim Entnehmen hatte keine Obergrenze
+
 ## 1.0.2
 
 - E-Mail-Einrichtung mit zwei Eingaben: Adresse + Passwort, Anbieter wird automatisch erkannt

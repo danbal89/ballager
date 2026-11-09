@@ -398,3 +398,28 @@ pre.preview { white-space: pre-wrap; font-family: inherit; background: var(--bg2
 
 .skeleton { height: 72px; border-radius: 18px; background: linear-gradient(90deg, var(--bg2), var(--card), var(--bg2)); background-size: 200% 100%; animation: shimmer 1.2s infinite; }
 @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+/* ---------- Krisenvorsorge ---------- */
+.prep-teaser { display: flex; align-items: center; gap: 14px; text-decoration: none; margin-top: 16px; padding: 12px 16px; }
+.prep-teaser .ring { flex-shrink: 0; color: var(--text); }
+.prep-hero { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.prep-hero .ring { color: var(--text); flex-shrink: 0; }
+.prep-hero-txt { flex: 1; min-width: 150px; display: grid; gap: 2px; }
+@media (max-width: 420px) { .prep-hero { gap: 12px; } .prep-hero .ring { width: 96px; height: 96px; } }
+.prep-settings { display: grid; grid-template-columns: auto 1fr; gap: 18px; align-items: start; }
+@media (max-width: 520px) { .prep-settings { grid-template-columns: 1fr; } }
+.prep-row { padding: 12px 0; border-top: 1px solid var(--line); cursor: pointer; }
+.prep-row:first-child { border-top: 0; }
+.prep-line { display: flex; gap: 12px; align-items: flex-start; }
+.prep-name { flex: 1; min-width: 0; }
+.prep-val { text-align: right; white-space: nowrap; font-size: 14px; }
+.bar { height: 10px; border-radius: 999px; background: var(--bg2); overflow: hidden; margin-top: 8px; }
+.bar > i { display: block; height: 100%; border-radius: 999px; transition: width .4s; }
+.bar.ok > i { background: var(--mint); }
+.bar.mid > i { background: var(--sun); }
+.bar.low > i { background: var(--coral); }
+.prep-detail { margin-top: 8px; padding: 6px 10px; border-radius: 12px; background: var(--bg2); }
+.prep-prod { display: flex; gap: 8px; align-items: center; padding: 6px 0; font-size: 14px; border-top: 1px dashed var(--line); }
+.prep-prod:first-child { border-top: 0; }
+.prep-check { align-items: flex-start; padding: 6px 0; font-weight: 700; }
+.prep-check input:disabled { opacity: 1; }

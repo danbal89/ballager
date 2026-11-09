@@ -152,7 +152,12 @@ function ask(text, { ok = "Ja", danger = false } = {}) {
 // Daten laden
 // ---------------------------------------------------------------------------
 async function loadMeta() { S.meta = await api("meta"); return S.meta; }
-async function loadItems() { S.items = (await api("inventory")).items; return S.items; }
+async function loadItems() {
+  const r = await api("inventory");
+  S.items = r.items;
+  S.prepItems = r.prep_items || [];
+  return S.items;
+}
 const cat = (id) => S.meta.categories.find((c) => c.id === id);
 const loc = (id) => S.meta.locations.find((l) => l.id === id);
 const findItem = (pid) => S.items.find((p) => p.id === pid);
@@ -170,10 +175,10 @@ const catOptions = (sel, empty = "– keine –") =>
 // ---------------------------------------------------------------------------
 // Bausteine: Mengen-Stepper und Ablaufdatum
 // ---------------------------------------------------------------------------
-function stepper(name, value = 1, min = 1) {
+function stepper(name, value = 1, min = 1, extra = "") {
   return `<div class="stepper" data-min="${min}">
     <button type="button" class="icon-btn minus" data-step="-1" aria-label="weniger">−</button>
-    <input type="number" inputmode="numeric" name="${name}" value="${value}" min="${min}">
+    <input type="number" inputmode="numeric" name="${name}" value="${value}" min="${min}" ${extra}>
     <button type="button" class="icon-btn plus" data-step="1" aria-label="mehr">+</button></div>`;
 }
 
@@ -371,11 +376,48 @@ function addStockSheet(p, onDone) {
   setTimeout(() => $("[name=quantity]", body)?.select(), 250);
 }
 
+// ---------------------------------------------------------------------------
+// Krisenvorsorge: Hilfen
+// ---------------------------------------------------------------------------
+const PREP_UNIT = { konserven: "Dosen", salate: "Gläser", kaese: "Pkg.", fisch: "Dosen", aufstrich: "Dosen", marmelade: "Gläser" };
+const fmtNum = (v) => Number(v || 0).toLocaleString("de-AT", { maximumFractionDigits: v && Math.abs(v) < 1 ? 2 : 1 });
+const prepUnit = (id, unit) => (unit === "stk" ? PREP_UNIT[id] || "Stk" : unit === "l" ? "l" : "kg");
+const SOURCE_TXT = { "packung": "aus Packungsgröße", "eingetragen": "eingetragen", "einheit": "aus Einheit", "geschätzt": "geschätzt", "stück": "Stück" };
+
+function scoreRing(score, size = 120) {
+  const pct = Math.round((score || 0) * 100);
+  const r = 42, c = 2 * Math.PI * r;
+  const color = pct >= 100 ? "var(--mint)" : pct >= 60 ? "var(--sun)" : "var(--coral)";
+  return `<svg class="ring" width="${size}" height="${size}" viewBox="0 0 100 100" role="img" aria-label="${pct} Prozent erfüllt">
+    <circle cx="50" cy="50" r="${r}" fill="none" stroke="var(--bg2)" stroke-width="12"/>
+    <circle cx="50" cy="50" r="${r}" fill="none" stroke="${color}" stroke-width="12" stroke-linecap="round"
+      stroke-dasharray="${(c * Math.min(pct, 100)) / 100} ${c}" transform="rotate(-90 50 50)"/>
+    <text x="50" y="56" text-anchor="middle" font-size="22" font-weight="900" fill="currentColor">${pct}%</text></svg>`;
+}
+
+function prepFields(p) {
+  const pr = p.prep || {};
+  const items = S.prepItems || [];
+  const detected = pr.auto && pr.item ? items.find((i) => i.id === pr.item) : null;
+  const sel = p.prep_group || "auto";
+  const it = items.find((i) => i.id === (sel === "auto" ? pr.item : sel));
+  const unit = it ? (it.unit === "l" ? "Liter" : it.unit === "kg" ? "kg" : "") : "kg / Liter";
+  return `<div class="full section-title" style="margin:10px 0 0"><h3>🛡️ Krisenvorsorge</h3></div>
+    <label class="field full"><span>Zählt bei der Vorsorge als</span><select name="prep_group">
+      <option value="auto" ${sel === "auto" ? "selected" : ""}>🔎 Automatisch${detected ? ` (erkannt: ${esc(detected.name)})` : " (nichts erkannt)"}</option>
+      <option value="none" ${sel === "none" ? "selected" : ""}>🚫 Nicht mitzählen</option>
+      ${items.map((i) => `<option value="${i.id}" ${sel === i.id ? "selected" : ""}>${esc(i.name)}</option>`).join("")}</select></label>
+    ${!it || it.unit !== "stk" ? `<label class="field full"><span>Inhalt pro Stück (${unit})</span>
+      <input name="content_amount" inputmode="decimal" value="${p.content_amount ?? ""}"
+        placeholder="${pr.each && pr.source !== "eingetragen" ? `automatisch: ${fmtNum(pr.each)} (${SOURCE_TXT[pr.source] || ""})` : "z.B. 0,5"}"></label>` : `<input type="hidden" name="content_amount" value="">`}`;
+}
+
 function editProductSheet(p, onDone) {
   const body = openSheet(`
     <div class="prod-head">${avatar(p, true)}<div><h2>Produkt bearbeiten</h2><div class="muted small">${esc(p.name)}</div></div></div>
     <form class="form-grid" id="eform" autocomplete="off">
       ${productFields(p)}
+      ${prepFields(p)}
       <button class="btn primary big full" type="submit">💾 Speichern</button>
       <button class="btn danger full" type="button" data-del>🗑️ Produkt ganz löschen</button>
     </form>`, () => onDone && onDone(false));
@@ -439,7 +481,7 @@ function consumeSheet(p, onDone) {
       ${p.batches.map((b) => `<button type="button" class="chip" data-src="${b.id}" data-max="${b.quantity}">${b.quantity}× ${esc(b.location_icon || "")} ${esc(b.location_name || "–")} · ${b.expiry_date ? fmtDate(b.expiry_date) : "∞"}</button>`).join("")}
     </div>
     <label class="field"><span>Menge</span></label>
-    ${stepper("amount", 1).replace('min="1"', `min="1" max="${p.total}"`)}
+    ${stepper("amount", 1, 1, `max="${p.total}"`)}
     <div class="row" style="margin-top:18px">
       <button class="btn primary big block" data-kind="verbrauch">✅ Verbraucht</button>
       <button class="btn danger big" data-kind="entsorgt" title="Weggeworfen">🗑️ Entsorgt</button>
@@ -569,7 +611,7 @@ const BALLS_SVG = `<svg class="balls" width="170" height="130" viewBox="0 0 170 
 
 async function renderHome() {
   view.innerHTML = `<div class="skeleton"></div>`;
-  const d = await api("dashboard");
+  const [d, vs] = await Promise.all([api("dashboard"), api("vorsorge").catch(() => null)]);
   const s = d.stats;
   const h = new Date().getHours();
   const greet = h < 11 ? "Guten Morgen! ☀️" : h < 17 ? "Hallo! 👋" : "Guten Abend! 🌙";
@@ -588,6 +630,11 @@ async function renderHome() {
       <a class="btn mint big" href="#/scan?mode=in">📥 Einlagern</a>
       <a class="btn primary big" href="#/scan?mode=out">📤 Entnehmen</a>
     </div>
+    ${vs ? `<a class="card prep-teaser" href="#/vorsorge">
+      ${scoreRing(vs.score, 64)}
+      <div style="flex:1;min-width:0"><div style="font-weight:900;font-size:17px">🛡️ Krisenvorsorge</div>
+        <div class="small muted">${vs.persons} Personen · ${vs.days} Tage · 💧 Wasser für ${fmtNum(vs.water_days)} Tag${vs.water_days === 1 ? "" : "e"}</div></div>
+      <span class="muted" style="font-size:22px">›</span></a>` : ""}
     <div class="section-title"><h2>⏰ Bald verbrauchen</h2><span class="spacer"></span><a class="small muted" href="#/vorrat?sort=expiry">alle</a></div>
     ${d.expiring.length ? `<div class="list">${d.expiring.map((e) => `
       <div class="item" data-pid="${e.product_id}">${avatar(e)}
@@ -1016,6 +1063,7 @@ async function renderSettings() {
   const theme = store.get("theme", "auto");
   view.innerHTML = `
     <div class="page-head"><div><h1>Einstellungen</h1><p class="muted small">Erinnerungen, Kategorien, Lagerorte & Daten</p></div></div>
+    <a class="card prep-teaser" href="#/vorsorge" style="margin-bottom:16px"><span style="font-size:30px">🛡️</span><div style="flex:1"><div style="font-weight:900">Krisenvorsorge</div><div class="small muted">Vorrat mit der Zivilschutz-Empfehlung vergleichen</div></div><span class="muted" style="font-size:22px">›</span></a>
 
     <section class="card" id="notify-card">
       <div class="row"><h2>🔔 Erinnerungen</h2><span class="spacer"></span>
@@ -1266,7 +1314,127 @@ function applyTheme() {
   else document.documentElement.dataset.theme = t;
 }
 
-const ROUTES = { "": renderHome, vorrat: renderVorrat, scan: renderScan, einkauf: renderEinkauf, einstellungen: renderSettings, verlauf: renderHistory };
+// ---------------------------------------------------------------------------
+// Seite: Krisenvorsorge
+// ---------------------------------------------------------------------------
+async function renderVorsorge() {
+  view.innerHTML = `<div class="skeleton"></div>`;
+  if (!S.items.length) await loadItems();
+  const v = await api("vorsorge");
+  const open = new Set(store.get("prepOpen", []));
+  const pctClass = (p) => (p >= 1 ? "ok" : p >= 0.5 ? "mid" : "low");
+  const missingFood = v.groups.flatMap((g) => g.items.filter((i) => i.missing > 0));
+  const byGroup = {};
+  v.checklist.forEach((c) => (byGroup[c.group] = byGroup[c.group] || []).push(c));
+  const waterTxt = v.water_days >= v.days ? `reicht für alle ${v.days} Tage` : `reicht für ${fmtNum(v.water_days)} von ${v.days} Tagen`;
+
+  view.innerHTML = `
+    <div class="page-head"><div><h1>Krisenvorsorge</h1>
+      <p class="muted small">Euer Vorrat im Vergleich mit der Empfehlung des Österreichischen Zivilschutzverbands</p></div></div>
+
+    <section class="card prep-hero">
+      ${scoreRing(v.score, 128)}
+      <div class="prep-hero-txt">
+        <div style="font-size:20px;font-weight:900">${v.score >= 1 ? "Bestens vorgesorgt! 🎉" : v.score >= 0.6 ? "Schon gut aufgestellt 👍" : "Da geht noch was 💪"}</div>
+        <div class="small" style="margin-top:4px">Lebensmittel zu <b>${Math.round(v.score * 100)} %</b> erfüllt</div>
+        <div class="small">💧 Wasser ${waterTxt}</div>
+        <div class="small">🧰 Ausrüstung: <b>${v.checklist_done} von ${v.checklist_total}</b></div>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top:12px">
+      <div class="prep-settings">
+        <div><label class="field"><span>Personen im Haushalt</span></label>${stepper("persons", v.persons, 1, 'max="30" id="prep-persons"')}</div>
+        <div><label class="field"><span>Vorrat für</span></label>
+          <div class="chips">${[7, 10, 14].map((dd) => `<button class="chip ${v.days === dd ? "on" : ""}" data-days="${dd}">${dd} Tage</button>`).join("")}</div>
+          <div class="tiny muted" style="margin-top:4px">Zivilschutz: mind. 7 Tage, besser 2 Wochen</div></div>
+      </div>
+    </section>
+
+    ${v.groups.map((g) => `
+      <div class="section-title"><h2>${g.icon} ${esc(g.name)}</h2></div>
+      <div class="card" style="padding:6px 14px">${g.items.map((it) => {
+        const u = prepUnit(it.id, it.unit);
+        const isOpen = open.has(it.id);
+        return `<div class="prep-row" data-prep="${it.id}">
+          <div class="prep-line">
+            <div class="prep-name"><b>${esc(it.name)}</b>${it.hint ? `<div class="tiny muted">${esc(it.hint)}</div>` : ""}</div>
+            <div class="prep-val"><b>${fmtNum(it.have)}</b> / ${fmtNum(it.target)} ${u}
+              ${it.missing > 0 ? `<div class="tiny" style="color:var(--coral-d)">fehlt ${fmtNum(it.missing)} ${u}</div>` : `<div class="tiny" style="color:var(--ok)">✓ erfüllt</div>`}</div>
+          </div>
+          <div class="bar ${pctClass(it.pct)}"><i style="width:${Math.round(it.pct * 100)}%"></i></div>
+          ${it.expired > 0 ? `<div class="tiny" style="color:var(--danger);margin-top:4px">⛔ ${fmtNum(it.expired)} ${u} abgelaufen – zählt nicht mit</div>` : ""}
+          <div class="prep-detail ${isOpen ? "" : "hidden"}">
+            ${it.products.length ? it.products.map((p) => `
+              <div class="prep-prod" data-pid="${p.id}">
+                <span>${p.qty}× ${esc(p.name)}${p.brand ? ` <span class="muted">${esc(p.brand)}</span>` : ""}</span>
+                <span class="spacer"></span>
+                <span class="tiny ${p.source === "geschätzt" ? "" : "muted"}" ${p.source === "geschätzt" ? 'style="color:var(--warn)"' : ""}>
+                  ${it.unit === "stk" ? "" : `à ${fmtNum(p.each)} ${u} · ${SOURCE_TXT[p.source]}`}</span>
+                <b style="min-width:58px;text-align:right">${fmtNum(p.amount)} ${u}</b>
+              </div>`).join("")
+              : `<div class="tiny muted" style="padding:6px 0">Noch nichts davon im Vorrat erfasst.</div>`}
+          </div>
+        </div>`;
+      }).join("")}</div>`).join("")}
+
+    ${v.estimated.length ? `<div class="hint" style="margin-top:16px">📏 Bei <b>${v.estimated.length} Produkt${v.estimated.length === 1 ? "" : "en"}</b> fehlt die Packungsgröße – BALLager rechnet mit typischen Größen.
+      Für genaue Werte antippen und „Inhalt pro Stück“ oder die Packungsgröße eintragen:
+      <div class="chips" style="margin-top:8px">${v.estimated.map((e) => `<button class="chip" data-pid="${e.id}">${esc(e.name)}</button>`).join("")}</div></div>` : ""}
+
+    <div class="section-title"><h2>🧰 Ausrüstung & Hygiene</h2><span class="spacer"></span><span class="muted small">${v.checklist_done}/${v.checklist_total}</span></div>
+    <div class="card" style="padding:8px 16px">${Object.entries(byGroup).map(([grp, list]) => `
+      <div class="group-head" style="margin:10px 0 4px">${esc(grp)}</div>
+      ${list.map((c) => `<label class="check prep-check">
+        <input type="checkbox" data-check="${c.id}" ${c.checked ? "checked" : ""} ${c.found.length ? "disabled" : ""}>
+        <span>${esc(c.name)}${c.found.length ? `<div class="tiny" style="color:var(--ok)">✓ im Vorrat: ${esc(c.found.join(", "))}</div>` : ""}</span></label>`).join("")}`).join("")}
+    </div>
+
+    <div class="row wrap" style="margin-top:16px">
+      ${missingFood.length ? `<button class="btn primary" data-share>📋 Fehlendes als Einkaufsliste teilen</button>` : ""}
+      <a class="btn" href="#/vorrat">🗄️ Zum Vorrat</a>
+    </div>
+    <p class="tiny muted" style="margin-top:18px">Quelle: <a href="${esc(v.source_url)}" target="_blank" rel="noopener noreferrer">${esc(v.source)}</a>.
+      Richtwerte für Erwachsene – passt sie an eure Essgewohnheiten an. Abgelaufene Ware zählt nicht mit.
+      Babys, Kranke und Ältere brauchen oft eigene Kost.</p>
+    ${footer()}`;
+
+  const save = (data) => run(async () => { await api("vorsorge", { method: "PUT", body: data }); renderVorsorge(); });
+  let tmr = null;
+  $("#prep-persons").addEventListener("input", (e) => {
+    clearTimeout(tmr);
+    const n = parseInt(e.target.value, 10);
+    if (n >= 1) tmr = setTimeout(() => save({ persons: n }), 500);
+  });
+  view.onclick = (e) => {
+    const dd = e.target.closest("[data-days]");
+    if (dd) return save({ days: Number(dd.dataset.days) });
+    const pp = e.target.closest("[data-pid]");
+    if (pp) { e.stopPropagation(); return run(async () => { await loadItems(); const p = findItem(Number(pp.dataset.pid)); if (p) editProductSheet(p, () => renderVorsorge()); }); }
+    const ck = e.target.closest("[data-check]");
+    if (ck) {
+      const manual = {};
+      $$("[data-check]").forEach((x) => { if (!x.disabled) manual[x.dataset.check] = x.checked; });
+      return save({ checklist: manual });
+    }
+    if (e.target.closest("[data-share]")) {
+      const text = `🛡️ Krisenvorrat ergänzen (${v.persons} Pers., ${v.days} Tage)\n` + missingFood.map((i) => `• ${fmtNum(i.missing)} ${prepUnit(i.id, i.unit)} ${i.name}`).join("\n");
+      if (navigator.share) navigator.share({ text }).catch(() => {});
+      else navigator.clipboard?.writeText(text).then(() => toast("📋 Kopiert!"), () => toast("Kopieren nicht möglich", { error: true }));
+      return;
+    }
+    const row = e.target.closest("[data-prep]");
+    if (row && !e.target.closest(".stepper")) {
+      const id = row.dataset.prep;
+      open.has(id) ? open.delete(id) : open.add(id);
+      store.set("prepOpen", [...open]);
+      $(".prep-detail", row).classList.toggle("hidden");
+    }
+  };
+  S.refresh = () => renderVorsorge();
+}
+
+const ROUTES = { "": renderHome, vorrat: renderVorrat, scan: renderScan, einkauf: renderEinkauf, einstellungen: renderSettings, verlauf: renderHistory, vorsorge: renderVorsorge };
 async function route() {
   const [path, query] = location.hash.replace(/^#\/?/, "").split("?");
   await stopScanner();

@@ -54,6 +54,24 @@ Alle fälligen Produkte werden in einer Nachricht zusammengefasst.
 
 Mit **Testnachricht** prüft ihr die Kanäle, mit **Vorschau** seht ihr, was heute verschickt würde.
 
+## Krisenvorsorge
+
+Die Seite **Krisenvorsorge** (Kachel auf der Übersicht, oder *Mehr → Krisenvorsorge*) vergleicht euren Vorrat
+mit der **Vorratsliste des Österreichischen Zivilschutzverbands** (Mengen pro Person und Woche). Standard sind
+**4 Personen und 14 Tage**; der Zivilschutz empfiehlt mindestens 7 Tage, besser 2 Wochen.
+
+- **Automatische Zuordnung:** Produkte werden am Namen erkannt („Spaghetti“ → Teigwaren, „Thunfisch“ → Fischkonserven).
+  Bei Produkten der Kategorie *Konserven* zählt alles Übrige als Konservendose.
+- **Mengen:** aus der Packungsgröße („500 g“, „6 x 1,5 l“). Fehlt sie, rechnet BALLager mit einer typischen Größe
+  und weist darauf hin („geschätzt“). Genauer wird es, wenn ihr die Packungsgröße eintragt.
+- **Ändern:** Produkt bearbeiten → Abschnitt *Krisenvorsorge*: andere Gruppe wählen, „Nicht mitzählen“ oder
+  „Inhalt pro Stück“ eintragen.
+- **Abgelaufenes** zählt nicht mit und wird getrennt angezeigt.
+- **Ausrüstung:** Checkliste für Hygiene, Apotheke, Licht/Radio/Notkochstelle, Bargeld und Dokumente.
+  Was im Vorrat erfasst ist (z.B. Klopapier, Batterien), wird automatisch abgehakt.
+
+Die Werte sind Richtwerte für Erwachsene – passt sie an eure Essgewohnheiten an.
+
 ## Home-Assistant-Sensoren
 
 BALLager stellt automatisch diese Sensoren bereit (aktualisiert alle 10 Minuten und nach jeder Änderung):
