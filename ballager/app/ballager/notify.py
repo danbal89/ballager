@@ -10,7 +10,7 @@ from datetime import date
 from email.message import EmailMessage
 from email.utils import formatdate, make_msgid
 
-from . import db, ha, inventory
+from . import db, email_providers, ha, inventory
 
 log = logging.getLogger("ballager.notify")
 
@@ -20,29 +20,49 @@ TITLE = "BALLager"
 # --------------------------------------------------------------------------
 # Kanäle
 # --------------------------------------------------------------------------
-def _send_email(cfg: dict, subject: str, text: str) -> None:
-    recipients = [r.strip() for r in str(cfg.get("recipients", "")).replace(";", ",").split(",") if r.strip()]
-    if not cfg.get("host") or not recipients:
+def _send_email(cfg: dict, subject: str, text: str) -> str:
+    """Versendet die Mail. Probiert bei Verbindungsproblemen die nächste Server-Einstellung.
+
+    Gibt den tatsächlich verwendeten Server zurück (z.B. "smtp.gmail.com:587").
+    """
+    r = email_providers.resolve(cfg)
+    if not r["servers"][0][0] or not r["recipients"]:
         raise ValueError("E-Mail: SMTP-Server und Empfänger angeben")
     msg = EmailMessage()
     msg["Subject"] = subject
-    msg["From"] = cfg.get("sender") or cfg.get("username") or "ballager@localhost"
-    msg["To"] = ", ".join(recipients)
+    msg["From"] = f"BALLager <{r['sender']}>" if r["sender"] else "ballager@localhost"
+    msg["To"] = ", ".join(r["recipients"])
     msg["Date"] = formatdate(localtime=True)
     msg["Message-ID"] = make_msgid(domain="ballager.local")
     msg.set_content(text)
-    port = int(cfg.get("port") or 587)
-    security = cfg.get("security", "starttls")
+    name = email_providers.PROVIDERS.get(r["provider"] or "", {}).get("name", "Mail-Server")
+    last_error: Exception | None = None
+    for host, port, security in r["servers"]:
+        try:
+            _smtp_send(host, int(port), security, r["username"], r["password"], msg)
+            return f"{host}:{port}"
+        except smtplib.SMTPAuthenticationError as exc:
+            raise ValueError(f"E-Mail: {name} hat die Anmeldung abgelehnt – bitte Adresse und "
+                             f"(App-)Passwort prüfen. ({exc.smtp_code})") from exc
+        except smtplib.SMTPRecipientsRefused as exc:
+            raise ValueError(f"E-Mail: Empfänger abgelehnt: {', '.join(exc.recipients)}") from exc
+        except (OSError, smtplib.SMTPException) as exc:  # Verbindung, Zeitüberschreitung, TLS …
+            log.info("E-Mail über %s:%s nicht möglich (%s) – probiere nächste Einstellung", host, port, exc)
+            last_error = exc
+    raise ValueError(f"E-Mail: keine Verbindung zu {name} möglich ({last_error})")
+
+
+def _smtp_send(host: str, port: int, security: str, username: str, password: str, msg: EmailMessage) -> None:
     ctx = ssl.create_default_context()
     if security == "ssl":
-        server: smtplib.SMTP = smtplib.SMTP_SSL(cfg["host"], port, context=ctx, timeout=20)
+        server: smtplib.SMTP = smtplib.SMTP_SSL(host, port, context=ctx, timeout=20)
     else:
-        server = smtplib.SMTP(cfg["host"], port, timeout=20)
+        server = smtplib.SMTP(host, port, timeout=20)
     with server:
         if security == "starttls":
             server.starttls(context=ctx)
-        if cfg.get("username"):
-            server.login(cfg["username"], cfg.get("password", ""))
+        if username:
+            server.login(username, password)
         server.send_message(msg)
 
 

@@ -39,8 +39,16 @@ Alle fälligen Produkte werden in einer Nachricht zusammengefasst.
 - **Home Assistant** – alle `notify.*` Dienste werden angeboten, z.B. `notify.mobile_app_<handy>` für Push-Nachrichten
   über die Companion-App, oder `persistent_notification.create` für eine Meldung in HA.
   Auch WhatsApp/Telegram/Signal-Integrationen, die einen `notify`-Dienst bereitstellen, funktionieren hier.
-- **E-Mail** – direkt über SMTP. Bei Gmail/Outlook ein *App-Passwort* verwenden.
-  Beispiele: Gmail `smtp.gmail.com` / 587 / STARTTLS · GMX `mail.gmx.net` / 587 / STARTTLS · A1 `smtp.a1.net` / 587 / STARTTLS.
+- **E-Mail** – nur **E-Mail-Adresse und Passwort** eintragen. BALLager erkennt den Anbieter an der Adresse
+  und stellt Server, Port und Verschlüsselung selbst ein – mit Anleitung direkt in der App.
+  Erkannt werden Gmail, A1 (auch aon.at), GMX, WEB.DE, iCloud, Yahoo, Posteo, mailbox.org und T-Online.
+  Klappt eine Verbindung nicht, probiert BALLager automatisch eine Ausweich-Einstellung.
+  - **Gmail, iCloud, Yahoo:** verlangen ein **App-Passwort** (nicht das normale Passwort).
+  - **GMX / WEB.DE:** einmalig im Webmail „POP3/IMAP-Zugriff“ erlauben.
+  - **Outlook / Hotmail:** Microsoft erlaubt das bei privaten Konten seit 2024 nicht mehr – als *Empfänger*
+    funktionieren diese Adressen aber problemlos.
+  - Andere Anbieter: „Andere (eigener Mail-Server)“ wählen und Server/Port selbst eintragen.
+  - Einstellungen aus Version 1.0.x (selbst eingetragener Server) gelten unverändert weiter.
 - **WhatsApp** – kostenlos über [CallMeBot](https://www.callmebot.com/blog/free-api-whatsapp-messages/).
   Jede Person holt sich einmalig einen eigenen API-Key (Anleitung in den Einstellungen).
 

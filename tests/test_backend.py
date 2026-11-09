@@ -524,6 +524,149 @@ class TestUpdates(Base):
             del db.DEFAULT_SETTINGS["notify"]["neue_option"]
 
 
+class _FakeSMTP(threading.Thread):
+    """Minimaler SMTP-Server (ohne TLS/Anmeldung) zum Prüfen des echten Versands."""
+
+    def __init__(self):
+        import socket
+        super().__init__(daemon=True)
+        self.sock = socket.socket()
+        self.sock.bind(("127.0.0.1", 0))
+        self.sock.listen(1)
+        self.port = self.sock.getsockname()[1]
+        self.mail = {"rcpt": [], "data": ""}
+
+    def run(self):
+        conn, _ = self.sock.accept()
+        f = conn.makefile("rwb")
+
+        def say(s):
+            f.write((s + "\r\n").encode())
+            f.flush()
+
+        say("220 test")
+        while True:
+            line = f.readline().decode().strip()
+            cmd = line.upper()
+            if cmd.startswith(("EHLO", "HELO")):
+                say("250 ok")
+            elif cmd.startswith("MAIL"):
+                say("250 ok")
+            elif cmd.startswith("RCPT"):
+                self.mail["rcpt"].append(line.split(":", 1)[1].strip("<> "))
+                say("250 ok")
+            elif cmd == "DATA":
+                say("354 go")
+                buf = []
+                while True:
+                    ln = f.readline().decode("utf-8", "replace")
+                    if ln.rstrip("\r\n") == ".":
+                        break
+                    buf.append(ln)
+                self.mail["data"] = "".join(buf)
+                say("250 queued")
+            elif cmd == "QUIT" or not line:
+                say("221 bye")
+                break
+            else:
+                say("250 ok")
+        conn.close()
+        self.sock.close()
+
+
+class TestEmail(Base):
+    def test_erkennung(self):
+        from ballager import email_providers as ep
+        cases = {"familie@gmail.com": "gmail", "Papa@A1.NET": "a1", "x@aon.at": "a1", "y@gmx.at": "gmx",
+                 "z@web.de": "webde", "m@icloud.com": "icloud", "o@hotmail.com": "outlook", "q@firma.at": None}
+        for addr, want in cases.items():
+            self.assertEqual(ep.detect(addr), want, addr)
+
+    def test_aufloesen_auto(self):
+        from ballager import email_providers as ep
+        r = ep.resolve({"provider": "auto", "address": "familie@gmail.com", "password": "abcd", "recipients": ""})
+        self.assertEqual(r["servers"][0], ("smtp.gmail.com", 587, "starttls"))
+        self.assertEqual((r["username"], r["sender"], r["recipients"]),
+                         ("familie@gmail.com", "familie@gmail.com", ["familie@gmail.com"]))
+        r = ep.resolve({"provider": "auto", "address": "a@a1.net", "recipients": "x@y.at; z@y.at"})
+        self.assertGreaterEqual(len(r["servers"]), 2, "A1 braucht Ausweich-Server")
+        self.assertEqual(r["recipients"], ["x@y.at", "z@y.at"])
+
+    def test_outlook_und_unbekannt_verstaendlich(self):
+        from ballager import email_providers as ep
+        with self.assertRaisesRegex(ValueError, "Microsoft"):
+            ep.resolve({"provider": "auto", "address": "a@outlook.com"})
+        with self.assertRaisesRegex(ValueError, "Andere"):
+            ep.resolve({"provider": "auto", "address": "a@firma.at"})
+        with self.assertRaisesRegex(ValueError, "Adresse"):
+            ep.resolve({"provider": "auto", "address": ""})
+
+    def test_einstellungen_aus_1_0_bleiben_gueltig(self):
+        """Wer in 1.0.x Server/Port selbst eingetragen hat, verschickt nach dem Update unverändert weiter."""
+        from ballager import email_providers as ep
+        with db.session() as conn:  # Stand wie in Version 1.0.1 (ohne provider/address)
+            with db.tx(conn):
+                db.set_setting(conn, "notify", {"enabled": True, "thresholds": [7], "time": "08:00",
+                                                "email": {"enabled": True, "host": "mail.firma.at", "port": 465,
+                                                          "security": "ssl", "username": "u", "password": "pw",
+                                                          "sender": "s@firma.at", "recipients": "a@b.at"},
+                                                "whatsapp": {"enabled": False, "recipients": []}})
+        db.init()
+        with db.session() as conn:
+            cfg = db.get_setting(conn, "notify")["email"]
+        self.assertEqual((cfg["provider"], cfg["address"], cfg["host"]), ("auto", "", "mail.firma.at"))
+        r = ep.resolve(cfg)
+        self.assertEqual(r["servers"], [("mail.firma.at", 465, "ssl")])
+        self.assertEqual((r["username"], r["password"], r["sender"]), ("u", "pw", "s@firma.at"))
+
+    def test_ausweichserver_und_anmeldefehler(self):
+        import smtplib
+        calls = []
+
+        def fake(host, port, sec, user, pw, msg):
+            calls.append((host, port))
+            if len(calls) == 1:
+                raise ConnectionRefusedError("Port zu")
+
+        with mock.patch.object(notify, "_smtp_send", side_effect=fake):
+            used = notify._send_email({"provider": "auto", "address": "a@a1.net", "password": "x"}, "T", "Text")
+        self.assertEqual(calls, [("smtp.a1.net", 587), ("smtp.a1.net", 465)])
+        self.assertEqual(used, "smtp.a1.net:465")
+
+        calls.clear()
+        def deny(host, port, sec, user, pw, msg):
+            calls.append(host)
+            raise smtplib.SMTPAuthenticationError(535, b"bad")
+        with mock.patch.object(notify, "_smtp_send", side_effect=deny):
+            with self.assertRaisesRegex(ValueError, "Anmeldung abgelehnt"):
+                notify._send_email({"provider": "auto", "address": "a@gmail.com", "password": "x"}, "T", "Text")
+        self.assertEqual(len(calls), 1, "bei falschem Passwort nicht weitere Server probieren")
+
+    def test_echter_versand(self):
+        srv = _FakeSMTP()
+        srv.start()
+        notify._send_email({"provider": "custom", "host": "127.0.0.1", "port": srv.port, "security": "none",
+                            "username": "", "sender": "ballager@test.at", "recipients": "mama@test.at, papa@test.at"},
+                           "BALLager – Vorrat prüfen", "⏰ Bald verbrauchen:\n• 2 Stk Mehl – läuft morgen ab")
+        srv.join(5)
+        self.assertEqual(srv.mail["rcpt"], ["mama@test.at", "papa@test.at"])
+        import email
+        m = email.message_from_string(srv.mail["data"], policy=email.policy.default)
+        self.assertIn("Mehl", m.get_content())
+        self.assertIn("ballager@test.at", m["From"])
+
+    def test_speichern_ueber_api(self):
+        body = json.loads(json.dumps(TestEinstellungen.FULL))
+        body["notify"]["email"] = {"enabled": True, "provider": "auto", "address": "familie@gmail.com",
+                                   "password": "app-pw", "recipients": ""}
+        r = self.api("PUT", "settings", body, 200)
+        self.assertEqual((r["notify"]["email"]["address"], r["notify"]["email"]["provider"]), ("familie@gmail.com", "auto"))
+        self.assertEqual(r["notify"]["email"]["password"], "••••••")
+        self.assertTrue(any(p["id"] == "gmail" for p in r["email_providers"]))
+        body["notify"]["email"]["provider"] = "gibtsnicht"
+        self.api("PUT", "settings", body, 400)
+
+
 class TestMigrationsZerleger(unittest.TestCase):
     def test_zerlegen(self):
         s = db._split_sql("-- Kommentar\nCREATE TABLE a(x);CREATE TABLE b(y TEXT DEFAULT 'a;b');\n\nINSERT INTO a VALUES(1);")

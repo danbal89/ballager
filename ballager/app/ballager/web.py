@@ -12,7 +12,7 @@ from datetime import datetime
 
 from flask import Flask, Response, abort, jsonify, request, send_file, send_from_directory
 
-from . import __version__, backup, db, ha, inventory, lookup, notify, scheduler
+from . import __version__, backup, db, email_providers, ha, inventory, lookup, notify, scheduler
 from .inventory import ValidationError
 
 log = logging.getLogger("ballager.web")
@@ -395,7 +395,8 @@ def _mask(cfg: dict) -> dict:
 @app.get("/api/settings")
 def get_settings():
     with db.session() as conn:
-        return jsonify(notify=_mask(db.get_setting(conn, "notify")), ui=db.get_setting(conn, "ui"), ha=ha.available())
+        return jsonify(notify=_mask(db.get_setting(conn, "notify")), ui=db.get_setting(conn, "ui"), ha=ha.available(),
+                       email_providers=email_providers.public_list())
 
 
 @app.put("/api/settings")
@@ -417,8 +418,12 @@ def put_settings():
                 n["include_low_stock"] = bool(new.get("include_low_stock"))
                 n["ha_services"] = [_str(s, 120) for s in new.get("ha_services", []) if "." in str(s)]
                 em = new.get("email") or {}
-                for k in ("host", "username", "sender", "recipients", "security"):
+                for k in ("host", "username", "sender", "recipients", "security", "address"):
                     n["email"][k] = _str(em.get(k), 500)
+                prov = _str(em.get("provider"), 20) or "auto"
+                if prov not in ("auto", "custom") and prov not in email_providers.PROVIDERS:
+                    raise ValidationError("Unbekannter E-Mail-Anbieter")
+                n["email"]["provider"] = prov
                 n["email"]["enabled"] = bool(em.get("enabled"))
                 n["email"]["port"] = int(em.get("port") or 587)
                 if em.get("password") != SECRET:

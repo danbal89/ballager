@@ -67,7 +67,7 @@ Dann <http://localhost:8099> öffnen.
 ## Tests – vor jedem Update ausführen
 
 ```bash
-python3 -m unittest discover -s tests -v      # 38 Tests: alle Funktionen, Sicherung, Migrationen, Parallelität
+python3 -m unittest discover -s tests -v      # 45 Tests: alle Funktionen, E-Mail, Sicherung, Migrationen, Parallelität
 python3 tests/update_test.py <alte-git-version> # echter Update-Test: alte Version erfasst, neue liest weiter
 python3 tests/crash_test.py 10                  # 10 harte Abstürze mitten im Schreiben
 ```

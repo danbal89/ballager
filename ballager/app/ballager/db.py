@@ -149,6 +149,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "ha_services": [],
         "email": {
             "enabled": False,
+            "provider": "auto",   # auto = aus Adresse erkennen, custom = eigener Server, sonst Anbieter-ID
+            "address": "",
             "host": "",
             "port": 587,
             "security": "starttls",

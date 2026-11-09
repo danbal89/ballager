@@ -1,5 +1,14 @@
 # Änderungen
 
+## 1.0.2
+
+- E-Mail-Einrichtung mit zwei Eingaben: Adresse + Passwort, Anbieter wird automatisch erkannt
+  (Gmail, A1, GMX, WEB.DE, iCloud, Yahoo, Posteo, mailbox.org, T-Online) – mit Anleitung zum App-Passwort
+- Automatische Ausweich-Server bei Verbindungsproblemen (z.B. A1: 587 → 465)
+- Verständliche Meldungen bei falschem Passwort, abgelehnten Empfängern und Outlook/Hotmail
+- Empfänger leer = Mail geht an die eigene Adresse
+- Bestehende E-Mail-Einstellungen aus 1.0.x bleiben unverändert gültig
+
 ## 1.0.1
 
 - Behoben: Kategorie ließ sich beim Anlegen/Bearbeiten ab dem zweiten Produkt nicht mehr auswählen und wurde nicht gespeichert

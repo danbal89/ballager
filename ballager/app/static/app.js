@@ -1042,17 +1042,29 @@ async function renderSettings() {
       </div>
 
       <div class="channel">
-        <div class="channel-head"><span class="ico">✉️</span><div class="grow"><div style="font-weight:900">E-Mail</div><div class="tiny muted">direkt über euren Mail-Anbieter (SMTP)</div></div>
+        <div class="channel-head"><span class="ico">✉️</span><div class="grow"><div style="font-weight:900">E-Mail</div><div class="tiny muted">Adresse + Passwort genügen – der Rest wird automatisch eingestellt</div></div>
           <label class="switch"><input type="checkbox" id="m-enabled" ${n.email.enabled ? "checked" : ""}><i></i></label></div>
-        <div class="channel-body form-grid" id="mail-body">
-          <label class="field"><span>SMTP-Server</span><input id="m-host" value="${esc(n.email.host)}" placeholder="z.B. smtp.gmail.com"></label>
-          <label class="field"><span>Port</span><input id="m-port" type="number" value="${n.email.port}"></label>
-          <label class="field"><span>Verschlüsselung</span><select id="m-sec">
-            ${[["starttls", "STARTTLS (587)"], ["ssl", "SSL/TLS (465)"], ["none", "keine"]].map(([k, l]) => `<option value="${k}" ${n.email.security === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
-          <label class="field"><span>Benutzer</span><input id="m-user" value="${esc(n.email.username)}" autocomplete="off"></label>
-          <label class="field"><span>Passwort / App-Passwort</span><input id="m-pass" type="password" value="${esc(n.email.password)}" autocomplete="new-password"></label>
-          <label class="field"><span>Absender</span><input id="m-from" value="${esc(n.email.sender)}" placeholder="optional"></label>
-          <label class="field full"><span>Empfänger (mehrere mit Komma)</span><input id="m-to" value="${esc(n.email.recipients)}" placeholder="papa@example.at, mama@example.at"></label>
+        <div class="channel-body" id="mail-body">
+          <div class="form-grid">
+            <label class="field full" id="m-addr-wrap"><span>Eure E-Mail-Adresse (von dieser wird gesendet)</span>
+              <input id="m-addr" type="email" inputmode="email" value="${esc(n.email.address)}" placeholder="z.B. familie.balla@gmail.com" autocomplete="off"></label>
+            <div class="full" id="m-detect"></div>
+            <label class="field full"><span id="m-pass-label">Passwort</span><input id="m-pass" type="password" value="${esc(n.email.password)}" autocomplete="new-password"></label>
+            <label class="field full"><span>Empfänger <span class="muted">(leer = an die Adresse oben · mehrere mit Komma)</span></span>
+              <input id="m-to" value="${esc(n.email.recipients)}" placeholder="papa@example.at, mama@example.at"></label>
+            <label class="field full"><span>Anbieter</span><select id="m-prov">
+              <option value="auto">🔎 Automatisch an der Adresse erkennen</option>
+              ${(st.email_providers || []).map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join("")}
+              <option value="custom">⚙️ Andere (eigener Mail-Server)</option></select></label>
+          </div>
+          <div class="form-grid hidden" id="m-custom" style="margin-top:12px">
+            <label class="field"><span>SMTP-Server</span><input id="m-host" value="${esc(n.email.host)}" placeholder="z.B. mail.example.at"></label>
+            <label class="field"><span>Port</span><input id="m-port" type="number" value="${n.email.port}"></label>
+            <label class="field"><span>Verschlüsselung</span><select id="m-sec">
+              ${[["starttls", "STARTTLS (587)"], ["ssl", "SSL/TLS (465)"], ["none", "keine"]].map(([k, l]) => `<option value="${k}" ${n.email.security === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+            <label class="field"><span>Benutzer</span><input id="m-user" value="${esc(n.email.username)}" autocomplete="off"></label>
+            <label class="field full"><span>Absender-Adresse</span><input id="m-from" value="${esc(n.email.sender)}" placeholder="optional, sonst Benutzer"></label>
+          </div>
         </div>
       </div>
 
@@ -1118,7 +1130,8 @@ async function renderSettings() {
       include_low_stock: $("#n-low").checked,
       ha_services: $$("#ha-list input:checked").map((i) => i.value),
       email: {
-        enabled: $("#m-enabled").checked, host: $("#m-host").value, port: Number($("#m-port").value) || 587,
+        enabled: $("#m-enabled").checked, provider: $("#m-prov").value, address: $("#m-addr").value.trim(),
+        host: $("#m-host").value, port: Number($("#m-port").value) || 587,
         security: $("#m-sec").value, username: $("#m-user").value, password: $("#m-pass").value,
         sender: $("#m-from").value, recipients: $("#m-to").value,
       },
@@ -1180,7 +1193,36 @@ async function renderSettings() {
       await loadMeta(); toast("✨ Hinzugefügt"); renderSettings();
     });
   };
+  // --- E-Mail: Anbieter erkennen und passende Felder/Anleitung zeigen ---
+  const providers = st.email_providers || [];
+  const isCustomCfg = n.email.provider === "custom" || (n.email.provider === "auto" && !n.email.address && n.email.host);
+  $("#m-prov").value = isCustomCfg ? "custom" : (n.email.provider || "auto");
+  const updateMail = () => {
+    const sel = $("#m-prov").value;
+    const custom = sel === "custom";
+    $("#m-custom").classList.toggle("hidden", !custom);
+    $("#m-addr-wrap").classList.toggle("hidden", custom);
+    const box = $("#m-detect");
+    box.classList.toggle("hidden", custom);
+    if (custom) { $("#m-pass-label").textContent = "Passwort"; return; }
+    const addr = $("#m-addr").value.trim().toLowerCase();
+    const domain = addr.includes("@") ? addr.split("@").pop() : "";
+    const p = sel === "auto" ? providers.find((x) => x.domains.includes(domain)) : providers.find((x) => x.id === sel);
+    const needsApp = !!(p && p.app_password);
+    $("#m-pass-label").textContent = needsApp ? "App-Passwort (nicht das normale Passwort!)" : "Passwort";
+    if (!addr) box.innerHTML = `<div class="tiny muted">Adresse eingeben – Server, Port und Verschlüsselung stellt BALLager selbst ein.</div>`;
+    else if (!p) box.innerHTML = `<div class="hint">🤔 Diesen Anbieter kennt BALLager noch nicht. Bitte unten bei „Anbieter“ <b>Andere (eigener Mail-Server)</b> wählen.</div>`;
+    else if (!p.supported) box.innerHTML = `<div class="hint" style="background:var(--danger-l)">⚠️ <b>${esc(p.name)}:</b> ${esc(p.help)}</div>`;
+    else box.innerHTML = `<div class="hint info">✅ <b>${esc(p.name)}</b> erkannt – Server werden automatisch eingestellt.
+      <details style="margin-top:6px"><summary style="cursor:pointer">${needsApp ? "So bekommt ihr das App-Passwort" : "Hinweis zum Passwort"}</summary>
+      <div style="margin-top:6px;font-weight:600">${esc(p.help)}</div>
+      <a href="${esc(p.url)}" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin-top:6px">→ ${esc(p.name)} öffnen</a></details></div>`;
+  };
+  $("#m-addr").oninput = updateMail;
+  updateMail();
+
   view.onchange = (e) => {
+    if (e.target.id === "m-prov") return updateMail();
     const row = e.target.closest("[data-mrow]");
     if (!row) return;
     const [table, id] = row.dataset.mrow.split(":");
